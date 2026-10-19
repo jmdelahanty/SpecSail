@@ -158,7 +158,8 @@ class FakeCitrus:
             error = self._canvas_fill_request_error(arena_ids, options)
             if error:
                 return self._response(req, accepted=False, error=error)
-            if self.controller_reject:
+            if self.controller_reject and (options.get("probe_targets") or
+                                           not self.controller_reject.startswith("probe_target")):
                 # accepted by the socket, then refused by the controller (Citrus C6)
                 self._command(req, "rejected", self.controller_reject)
                 return self._response(req)

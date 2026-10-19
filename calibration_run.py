@@ -162,6 +162,15 @@ def load_plan(path):
         if patch.get("role") not in ROLES:
             errors.append(f"patch {pid}: role must be one of {ROLES} (black is paired automatically)")
 
+    placement = plan.get("placement", {})
+    if not isinstance(placement, dict) or not isinstance(placement.get("probe_targets", True), bool):
+        errors.append("placement.probe_targets must be true or false")
+    elif placement.get("probe_targets") is False:
+        for pos in plan.get("positions") or []:
+            if [float(v) for v in pos.get("offset_mm", [0.0, 0.0])] != [0.0, 0.0]:
+                errors.append(f"position {pos.get('position_id')}: without probe targets only "
+                              f"the arena centre (offset_mm [0, 0]) can be placed by the overlay")
+
     integration = plan.get("integration", {})
     if not isinstance(integration, dict):
         errors.append("integration must be an object")
@@ -216,16 +225,22 @@ class CanvasFillScenes:
         ]
 
     def _set(self, rgba8, overlay, position):
-        options = {
-            "foreground_rgba_u8": list(rgba8),
-            "placement_overlay": overlay,
-            "probe_targets": self.targets,
-            "active_target": position["position_id"] if position else None,
-        }
+        options = {"foreground_rgba_u8": list(rgba8), "placement_overlay": overlay}
+        if self.plan.get("placement", {}).get("probe_targets", True):
+            options["probe_targets"] = self.targets
+            options["active_target"] = position["position_id"] if position else None
         request_id, operation_id = self.citrus.set_scene(
             self.transaction_id, self.recipe_id, self.plan["arena_ids"], options)
         self.requested = True
-        status = self.citrus.wait_for_state(request_id, operation_id, "presented")
+        try:
+            status = self.citrus.wait_for_state(request_id, operation_id, "presented")
+        except CitrusControlError as exc:
+            if "probe_target_scale_unavailable" in str(exc):
+                raise RunAborted(
+                    f"{exc}: an arena has no accepted projector scale. Set "
+                    f"\"placement\": {{\"probe_targets\": false}} in the plan to place by the "
+                    f"arena outlines and centre rings (all offsets must then be [0, 0])") from exc
+            raise
         # Only a presented scene proves the transaction is open; a scene refused
         # by the controller before any was presented leaves nothing to restore.
         self.active = True

@@ -168,13 +168,30 @@ class CalibrationRunTest(unittest.TestCase):
         self.assertNotIn("restore failed", self.read_context(run.bundle.root)["error"])
 
     def test_controller_rejection_stops_without_restore(self):
-        citrus = self.fake_citrus(controller_reject="probe_target_scale_unavailable:arena_1")
+        citrus = self.fake_citrus(controller_reject="stimulus_framebuffer_unavailable")
         run = self.make_run(BASE_PLAN, citrus)
         with self.assertRaises(CitrusControlError) as caught:
             run.run()
-        self.assertIn("probe_target_scale_unavailable", str(caught.exception))
+        self.assertIn("stimulus_framebuffer_unavailable", str(caught.exception))
         self.assertEqual(citrus.restores, 0)
         self.assertNotIn("restore failed", self.read_context(run.bundle.root)["error"])
+
+    def test_scale_unavailable_points_to_placement_without_targets(self):
+        citrus = self.fake_citrus(controller_reject="probe_target_scale_unavailable:arena_1")
+        run = self.make_run(BASE_PLAN, citrus)
+        with self.assertRaises(RunAborted) as caught:
+            run.run()
+        self.assertIn('"probe_targets": false', str(caught.exception))
+
+    def test_placement_without_probe_targets(self):
+        citrus = self.fake_citrus(controller_reject="probe_target_scale_unavailable:arena_1")
+        plan = copy.deepcopy(BASE_PLAN)
+        plan["placement"] = {"probe_targets": False}
+        bundle = self.make_run(plan, citrus).run()
+        self.assertEqual(self.read_context(bundle)["outcome"], "completed")
+        sets = [r for r in citrus.requests if r["method"] == "set_calibration_scene"]
+        self.assertTrue(all("probe_targets" not in r["params"]["scene_options"] for r in sets))
+        self.assertTrue(sets[0]["params"]["scene_options"]["placement_overlay"])
 
     def test_overlay_left_on_refuses_capture_and_restores(self):
         citrus = self.fake_citrus(overlay_stuck=True)
@@ -252,6 +269,12 @@ class PlanValidationTest(unittest.TestCase):
 
     def test_fixed_patch_integration_respects_minimum(self):
         self.check_invalid(lambda p: p["patches"][0].update(integration_ms=50), ">= integration.min_ms")
+
+    def test_placement_without_targets_needs_centre_positions(self):
+        def mutate(p):
+            p["placement"] = {"probe_targets": False}
+            p["positions"][0]["offset_mm"] = [5.0, 0.0]
+        self.check_invalid(mutate, "arena centre")
 
     def test_core_v1_patches_are_valid(self):
         plan = copy.deepcopy(BASE_PLAN)
