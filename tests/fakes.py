@@ -16,6 +16,10 @@ import threading
 import numpy as np
 
 
+BUILD = {"software_version": "0", "git_commit_hash": "fake", "git_describe": "fake",
+         "git_dirty": False, "build_utc": "2026-10-19T00:00:00Z"}
+
+
 class FakeCitrus:
     """
     Fake Citrus local control server on a temporary Unix socket.
@@ -33,11 +37,13 @@ class FakeCitrus:
     """
 
     def __init__(self, arenas=("arena_1", "arena_2", "arena_3", "arena_4"),
-                 canvas_fill_supported=True, overlay_stuck=False, present_after_polls=2):
+                 canvas_fill_supported=True, overlay_stuck=False, present_after_polls=2,
+                 controller_reject=None):
         self.arenas = list(arenas)
         self.canvas_fill_supported = canvas_fill_supported
         self.overlay_stuck = overlay_stuck
         self.present_after_polls = present_after_polls
+        self.controller_reject = controller_reject
         self.lock = threading.Lock()
         self.requests = []
         self.active_transaction = None
@@ -108,7 +114,8 @@ class FakeCitrus:
     def _handle(self, req):
         method = req["method"]
         if method == "status":
-            return self._response(req, status={"citrus_build": {"git_commit": "fake", "dirty": False}})
+            return self._response(req, status={"citrus_build": dict(BUILD),
+                                               "arenas": [{"arena_id": a} for a in self.arenas]})
         if method == "active_projection_snapshot":
             return self._response(req, effect={"arenas": self.arenas})
         if method == "calibration_scene_status":
@@ -147,8 +154,14 @@ class FakeCitrus:
             return self._response(req)
         if recipe == "canvas_fill" and not self.canvas_fill_supported:
             return self._response(req, accepted=False, error="unsupported_calibration_scene_recipe")
-        if recipe == "canvas_fill" and sorted(arena_ids) != sorted(self.arenas):
-            return self._response(req, accepted=False, error="canvas_fill_requires_all_arenas")
+        if recipe == "canvas_fill":
+            error = self._canvas_fill_request_error(arena_ids, options)
+            if error:
+                return self._response(req, accepted=False, error=error)
+            if self.controller_reject:
+                # accepted by the socket, then refused by the controller (Citrus C6)
+                self._command(req, "rejected", self.controller_reject)
+                return self._response(req)
         self.active_transaction = tx
         self.target_set = sorted(arena_ids)
         self.scene["active"] = True
@@ -159,12 +172,21 @@ class FakeCitrus:
         if recipe == "canvas_fill":
             rgba = list(options["foreground_rgba_u8"])
             overlay = bool(options.get("placement_overlay")) or self.overlay_stuck
+            active = options.get("active_target")
             self.scene["canvas_fill"] = {
                 "foreground_rgba_u8": rgba,
                 "placement_overlay": overlay,
-                "probe_targets": [dict(t, canvas_px=[100.0, 100.0]) for t in options.get("probe_targets", [])],
-                "active_target": options.get("active_target"),
+                "overlay_line_rgba_u8": [0, 0, 0, 255] if overlay else None,
+                "target_offset_axes": "final_display_canvas_x_right_y_down_mm",
+                "framebuffer_size_px": [1920, 1080],
+                "probe_targets": [dict(t, canvas_px=[100.0, 100.0], active=t["target_id"] == active)
+                                  for t in options.get("probe_targets", [])],
+                "active_target": active,
                 "illumination_domain": "full_canvas",
+                "arenas": [{"arena_id": a, "experimental_area_center_canvas_px": [480.0, 270.0],
+                            "pixels_per_mm_projector": 4.0} for a in self.arenas],
+                "photodiode_marker": {"configured": None, "drawn": False,
+                                      "reason": "drawn_only_while_a_protocol_runs"},
             }
             self.rgba_by_arena = {a: rgba for a in self.arenas}
         elif recipe == "uniform_gray":
@@ -176,10 +198,36 @@ class FakeCitrus:
         else:
             for a in arena_ids:
                 self.rgba_by_arena[a] = [40, 40, 40, 255]
-        self.scene["citrus_build"] = {"git_commit": "fake", "dirty": False, "software_version": "0"}
+        self.scene["citrus_build"] = dict(BUILD)
+        self.scene["swap_end_semantics"] = "swap_call_returned_submitted_not_scanout"
+        self.scene["visible_from_display_frame_swap_end_epoch_ns"] = 1_760_000_000_000_000_000
+        self.scene["visible_from_display_frame_swap_end_utc"] = "2025-10-09T08:53:20.000000Z"
         self._command(req, "applied")
         self.polls_left = self.present_after_polls
         return self._response(req)
+
+
+    def _canvas_fill_request_error(self, arena_ids, options):
+        """Request-level refusals, as the Citrus C6 socket validation returns them."""
+        if sorted(arena_ids) != sorted(self.arenas) or len(set(arena_ids)) != len(arena_ids):
+            return "canvas_fill_requires_all_arenas"
+        allowed = {"foreground_rgba_u8", "placement_overlay", "probe_targets", "active_target"}
+        for key in options:
+            if key not in allowed:
+                return f"scene_options_unknown_key:{key}"
+        rgba = options.get("foreground_rgba_u8")
+        if not (isinstance(rgba, list) and len(rgba) == 4 and
+                all(isinstance(v, int) and 0 <= v <= 255 for v in rgba) and rgba[3] == 255):
+            return "scene_options_foreground_rgba_u8_invalid"
+        if "placement_overlay" in options and not isinstance(options["placement_overlay"], bool):
+            return "scene_options_placement_overlay_must_be_bool"
+        targets = options.get("probe_targets", [])
+        ids = [t.get("target_id") for t in targets]
+        if len(set(ids)) != len(ids) or any(t.get("arena_id") not in arena_ids for t in targets):
+            return "probe_targets_invalid"
+        if options.get("active_target") is not None and options["active_target"] not in ids:
+            return "active_target_unknown"
+        return None
 
 
 class _Feature:

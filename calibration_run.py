@@ -207,7 +207,8 @@ class CanvasFillScenes:
         self.citrus = citrus
         self.plan = plan
         self.transaction_id = run_id
-        self.active = False
+        self.active = False      # a scene of this transaction was presented
+        self.requested = False   # Citrus accepted a scene request (may be open)
         self.targets = [
             {"target_id": p["position_id"], "arena_id": p["arena_id"],
              "offset_mm": [float(v) for v in p.get("offset_mm", [0.0, 0.0])]}
@@ -223,8 +224,11 @@ class CanvasFillScenes:
         }
         request_id, operation_id = self.citrus.set_scene(
             self.transaction_id, self.recipe_id, self.plan["arena_ids"], options)
-        self.active = True
+        self.requested = True
         status = self.citrus.wait_for_state(request_id, operation_id, "presented")
+        # Only a presented scene proves the transaction is open; a scene refused
+        # by the controller before any was presented leaves nothing to restore.
+        self.active = True
         return status, request_id, operation_id
 
     def placement(self, position):
@@ -252,7 +256,16 @@ class CanvasFillScenes:
     def finish(self):
         if self.active:
             request_id, operation_id = self.citrus.restore_scene(self.transaction_id)
-            self.active = False
+            self.active = self.requested = False
+            self.citrus.wait_for_state(request_id, operation_id, "restored")
+        elif self.requested:
+            # Accepted but never presented: the transaction may or may not be
+            # open in Citrus. Try a restore; a refusal means there was nothing open.
+            self.requested = False
+            try:
+                request_id, operation_id = self.citrus.restore_scene(self.transaction_id)
+            except CitrusControlError:
+                return
             self.citrus.wait_for_state(request_id, operation_id, "restored")
 
 
@@ -280,8 +293,10 @@ class UniformGrayScenes(CanvasFillScenes):
         self._begin(position)
         request_id, operation_id = self.citrus.set_scene(
             self.transaction_id, "experimental_area_center_and_outline", [self.arena_id])
+        self.requested = True
+        status = self.citrus.wait_for_state(request_id, operation_id, "presented")
         self.active = True
-        return self.citrus.wait_for_state(request_id, operation_id, "presented")
+        return status
 
     def show(self, rgba8, position):
         gray = rgba8[0]

@@ -13,7 +13,7 @@ from pathlib import Path
 
 from calibration_run import (CalibrationRun, RunAborted, core_v1_patches,
                              gray_pilot_patches, load_plan)
-from citrus_control import CitrusControl
+from citrus_control import CitrusControl, CitrusControlError
 from spectral_capture import SpectralDevice
 from tests.fakes import FakeCitrus, FakeSpectrometer, ScriptedOperator
 
@@ -79,7 +79,7 @@ class CalibrationRunTest(unittest.TestCase):
         bundle = self.make_run(BASE_PLAN, citrus).run()
         context = self.read_context(bundle)
         self.assertEqual(context["outcome"], "completed")
-        self.assertEqual(context["citrus_build"]["git_commit"], "fake")
+        self.assertEqual(context["citrus_build"]["git_commit_hash"], "fake")
         # per position: 3 patches + drift start/after_2/end, then one paired dark per integration
         roles = [m["role"] for m in context["measurements"]]
         self.assertEqual(roles.count("projector_red_primary"), 2)
@@ -141,6 +141,40 @@ class CalibrationRunTest(unittest.TestCase):
             run.run()
         self.assertIn("minimum integration", str(caught.exception))
         self.assertEqual(citrus.restores, 1)
+
+    def test_scene_records_swap_time_and_full_canvas_status(self):
+        citrus = self.fake_citrus()
+        bundle = self.make_run(BASE_PLAN, citrus).run()
+        mdir = next((bundle / "measurements").glob("arena_1_center__white_255__*"))
+        status = json.loads((mdir / "measurement.json").read_text())["scene"]["status"]
+        self.assertIsInstance(status["visible_from_display_frame_swap_end_epoch_ns"], int)
+        self.assertEqual(status["canvas_fill"]["photodiode_marker"]["drawn"], False)
+        self.assertIsNone(status["canvas_fill"]["overlay_line_rgba_u8"])
+        context = self.read_context(bundle)
+        placement = context["probe_observations"][0]["placement_scene_status"]["canvas_fill"]
+        self.assertTrue(placement["placement_overlay"])
+        self.assertEqual([t["active"] for t in placement["probe_targets"]], [True, False])
+
+    def test_request_refusal_stops_without_restore(self):
+        citrus = self.fake_citrus()
+        plan = copy.deepcopy(BASE_PLAN)
+        plan["arena_ids"] = ["arena_1", "arena_2", "arena_3"]  # Citrus has four
+        plan["positions"] = plan["positions"][:1]
+        run = self.make_run(plan, citrus)
+        with self.assertRaises(CitrusControlError) as caught:
+            run.run()
+        self.assertIn("canvas_fill_requires_all_arenas", str(caught.exception))
+        self.assertEqual(citrus.restores, 0)
+        self.assertNotIn("restore failed", self.read_context(run.bundle.root)["error"])
+
+    def test_controller_rejection_stops_without_restore(self):
+        citrus = self.fake_citrus(controller_reject="probe_target_scale_unavailable:arena_1")
+        run = self.make_run(BASE_PLAN, citrus)
+        with self.assertRaises(CitrusControlError) as caught:
+            run.run()
+        self.assertIn("probe_target_scale_unavailable", str(caught.exception))
+        self.assertEqual(citrus.restores, 0)
+        self.assertNotIn("restore failed", self.read_context(run.bundle.root)["error"])
 
     def test_overlay_left_on_refuses_capture_and_restores(self):
         citrus = self.fake_citrus(overlay_stuck=True)
