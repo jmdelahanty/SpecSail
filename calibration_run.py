@@ -162,6 +162,28 @@ def load_plan(path):
         if patch.get("role") not in ROLES:
             errors.append(f"patch {pid}: role must be one of {ROLES} (black is paired automatically)")
 
+    integration = plan.get("integration", {})
+    if not isinstance(integration, dict):
+        errors.append("integration must be an object")
+        integration = {}
+    min_ms = integration.get("min_ms", 100)
+    max_ms = integration.get("max_ms", 10000)
+    initial_ms = integration.get("initial_ms", 100)
+    rate = integration.get("frame_rate_hz")
+    if not all(isinstance(v, (int, float)) and v > 0 for v in (min_ms, max_ms, initial_ms)):
+        errors.append("integration min_ms, initial_ms and max_ms must be positive numbers")
+    elif not min_ms <= initial_ms <= max_ms:
+        errors.append("integration must satisfy min_ms <= initial_ms <= max_ms")
+    if rate is not None and not (isinstance(rate, (int, float)) and rate > 0):
+        errors.append("integration.frame_rate_hz must be a positive number")
+    elif rate is not None and isinstance(min_ms, (int, float)) and min_ms * 1000 < 1e6 / rate:
+        errors.append("integration.min_ms must cover at least one frame at frame_rate_hz")
+    for patch in plan.get("patches") or []:
+        fixed = patch.get("integration_ms")
+        if fixed is not None and isinstance(min_ms, (int, float)) and (
+                not isinstance(fixed, (int, float)) or fixed < min_ms):
+            errors.append(f"patch {patch.get('patch_id')}: integration_ms must be >= integration.min_ms")
+
     if errors:
         raise ValueError("invalid plan:\n  " + "\n  ".join(errors))
     return plan, hashlib.sha256(raw).hexdigest()
@@ -436,14 +458,30 @@ class CalibrationRun:
         return {"stable": False, "attempts": attempts, "relative_change": change,
                 "tolerance": tolerance}
 
+    def _integration_limits(self):
+        min_ms = self._setting("integration", "min_ms", default=100)
+        max_ms = self._setting("integration", "max_ms", default=10000)
+        rate = self._setting("integration", "frame_rate_hz")
+        return int(min_ms * 1000), int(max_ms * 1000), (1e6 / rate if rate else None)
+
+    def _quantized(self, integration_us):
+        min_us, max_us, frame_us = self._integration_limits()
+        return self.device.quantize_integration_us(integration_us, min_us, max_us, frame_us)
+
     def _integration_for(self, patch):
         if patch.get("integration_ms") is not None:
-            return self.device.set_integration_us(int(patch["integration_ms"] * 1000))
+            return self.device.set_integration_us(self._quantized(patch["integration_ms"] * 1000))
         initial_ms = self._setting("integration", "initial_ms", default=100)
         target = self._setting("integration", "target_peak_fraction", default=0.8)
-        max_ms = self._setting("integration", "max_ms", default=10000)
-        chosen = self.device.choose_integration_us(int(initial_ms * 1000), target)
-        return self.device.set_integration_us(min(chosen, int(max_ms * 1000)))
+        min_us, max_us, frame_us = self._integration_limits()
+        chosen, saturated_at_minimum = self.device.choose_integration_us(
+            int(initial_ms * 1000), target, min_us, max_us, frame_us)
+        if saturated_at_minimum:
+            raise RunAborted(
+                f"patch {patch['patch_id']} saturates at the minimum integration "
+                f"({chosen / 1000:.1f} ms): attenuate the light at the fiber; "
+                f"do not lower integration.min_ms below whole projector frames")
+        return self.device.set_integration_us(chosen)
 
     def _record(self, measurement_id, role, rgba8, position, scene, extra=None):
         n_scans = self._setting("scans_per_patch", default=5)
@@ -563,7 +601,8 @@ class CalibrationRun:
         if not self._setting("projector_off_background", default=False):
             return
         self.operator.confirm("Put the projector in standby (lamp off) now; done?")
-        self.device.set_integration_us(int(self._setting("integration", "initial_ms", default=100) * 1000))
+        self.device.set_integration_us(
+            self._quantized(self._setting("integration", "initial_ms", default=100) * 1000))
         self._record("projector_off_background__0000", "projector_off_background", None, None, None)
         self.operator.confirm(
             f"Turn the projector back on and wait {self._setting('warmup_min', default=30)} min; done?")

@@ -167,18 +167,43 @@ class SpectralDevice:
             return 0.0
         return float(np.mean(counts[self.dark_pixels]))
 
-    def choose_integration_us(self, initial_us, target_fraction=0.8, max_iterations=6):
+    def quantize_integration_us(self, integration_us, min_us=None, max_us=None, frame_us=None):
+        """
+        Clamp an integration time to the device and plan limits, then round it to
+        a whole number of display frames when ``frame_us`` is given.
+
+        Whole frames keep every scan averaging complete projector frames, so the
+        projector's own time modulation within a frame cannot beat with the scan.
+        """
+        lo, hi = self.integration_limits_us
+        lo = max(lo, int(min_us or 0))
+        hi = min(hi, int(max_us)) if max_us else hi
+        integration_us = min(max(float(integration_us), lo), hi)
+        if frame_us:
+            n_min = int(np.ceil(lo / frame_us))
+            n_max = max(int(np.floor(hi / frame_us)), n_min)
+            n = min(max(int(round(integration_us / frame_us)), n_min), n_max)
+            integration_us = n * frame_us
+        return int(round(integration_us))
+
+    def choose_integration_us(self, initial_us, target_fraction=0.8, min_us=None, max_us=None,
+                              frame_us=None, max_iterations=6):
         """
         Pick an integration time whose peak (above dark) sits near ``target_fraction``
-        of the maximum counts.
+        of the maximum counts, within [``min_us``, ``max_us``] and in whole frames.
 
         Returns
         -------
-        int
+        integration_us : int
             The chosen integration time in microseconds.
+        saturated_at_minimum : bool
+            True when even the shortest allowed integration saturates; the light
+            must then be attenuated, not integrated shorter.
         """
-        integration_us = self.set_integration_us(initial_us)
-        lo, hi = self.integration_limits_us
+        def quantize(us):
+            return self.quantize_integration_us(us, min_us, max_us, frame_us)
+
+        integration_us = self.set_integration_us(quantize(initial_us))
         for _ in range(max_iterations):
             scan = self.scan()
             dark = self.dark_level(scan["counts"])
@@ -186,13 +211,15 @@ class SpectralDevice:
             headroom = self.max_intensity - dark
             fraction = peak / headroom
             if scan["saturated_pixel_count"] == 0 and 0.5 * target_fraction <= fraction <= target_fraction:
-                return integration_us
+                return integration_us, False
             if scan["saturated_pixel_count"] > 0:
-                proposed = integration_us / 4
+                proposed = quantize(integration_us / 4)
+                if proposed == integration_us:
+                    return integration_us, True
             else:
-                proposed = integration_us * (target_fraction * 0.9) / fraction
-            proposed = int(min(max(proposed, lo), hi))
+                proposed = quantize(integration_us * (target_fraction * 0.9) / fraction)
             if proposed == integration_us:
-                return integration_us
+                return integration_us, False
             integration_us = self.set_integration_us(proposed)
-        return integration_us
+        final = self.scan()
+        return integration_us, final["saturated_pixel_count"] > 0 and integration_us == quantize(0)

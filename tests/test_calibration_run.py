@@ -57,9 +57,10 @@ class CalibrationRunTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
 
-    def make_run(self, plan, citrus, operator=None):
+    def make_run(self, plan, citrus, operator=None, counts_per_ms_at_full=400.0):
         plan_obj, sha = load_plan(write_plan(self.tmp.name, plan))
-        device = SpectralDevice(FakeSpectrometer(citrus, arena_id=plan["positions"][0]["arena_id"]),
+        device = SpectralDevice(FakeSpectrometer(citrus, arena_id=plan["positions"][0]["arena_id"],
+                                                 counts_per_ms_at_full=counts_per_ms_at_full),
                                 "fake")
         control = CitrusControl(citrus.socket_path, run_id="t", timeout_s=2.0)
         return CalibrationRun(plan_obj, sha, control, device, operator or ScriptedOperator(),
@@ -121,6 +122,25 @@ class CalibrationRunTest(unittest.TestCase):
         context = self.read_context(bundle)
         lit = [m for m in context["measurements"] if m["role"] != "projector_black"]
         self.assertFalse(any(m["any_saturated"] for m in lit))
+
+    def test_integration_is_whole_frames_and_not_below_minimum(self):
+        citrus = self.fake_citrus()
+        plan = copy.deepcopy(BASE_PLAN)
+        plan["integration"].update(min_ms=100, frame_rate_hz=120)
+        bundle = self.make_run(plan, citrus, counts_per_ms_at_full=1500.0).run()
+        frame_us = 1e6 / 120
+        for m in self.read_context(bundle)["measurements"]:
+            self.assertGreaterEqual(m["integration_us"], 100000)
+            frames = m["integration_us"] / frame_us
+            self.assertAlmostEqual(frames, round(frames), delta=1.0 / frame_us)
+
+    def test_saturation_at_minimum_integration_aborts(self):
+        citrus = self.fake_citrus()
+        run = self.make_run(BASE_PLAN, citrus, counts_per_ms_at_full=5000.0)
+        with self.assertRaises(RunAborted) as caught:
+            run.run()
+        self.assertIn("minimum integration", str(caught.exception))
+        self.assertEqual(citrus.restores, 1)
 
     def test_overlay_left_on_refuses_capture_and_restores(self):
         citrus = self.fake_citrus(overlay_stuck=True)
@@ -188,6 +208,16 @@ class PlanValidationTest(unittest.TestCase):
 
     def test_position_arena_must_be_listed(self):
         self.check_invalid(lambda p: p["positions"][0].update(arena_id="arena_9"), "arena_9")
+
+    def test_minimum_integration_ordering(self):
+        self.check_invalid(lambda p: p["integration"].update(min_ms=200), "min_ms <= initial_ms")
+
+    def test_minimum_integration_covers_a_frame(self):
+        self.check_invalid(lambda p: p["integration"].update(min_ms=5, initial_ms=5, frame_rate_hz=120),
+                           "at least one frame")
+
+    def test_fixed_patch_integration_respects_minimum(self):
+        self.check_invalid(lambda p: p["patches"][0].update(integration_ms=50), ">= integration.min_ms")
 
     def test_core_v1_patches_are_valid(self):
         plan = copy.deepcopy(BASE_PLAN)

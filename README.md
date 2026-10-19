@@ -99,7 +99,7 @@ Measures a projector driven by [Citrus](https://github.com/JohnsonLabJanelia/cit
 2. steps every patch through Citrus calibration scenes, waits until Citrus reports the patch on screen plus a settle time and a stability check, then records raw scans;
 3. records a projector-black dark at every integration time it used.
 
-Citrus is restored after every run, including after errors and Ctrl+C. Plans are JSON (`citrus.projector_spectral_run_plan` v1); see `examples/`. The gray pilot uses scenes Citrus has today (`uniform_gray`, one arena per position). The full-canvas plan needs the `canvas_fill` scene, which Citrus is adding.
+Citrus is restored after every run, including after errors and Ctrl+C. Integration is chosen automatically below saturation but never below `integration.min_ms`, and is rounded to whole display frames when `integration.frame_rate_hz` is set, so every scan averages complete projector frames. If a patch saturates even at the minimum, the run stops: attenuate the light rather than shortening the integration. Plans are JSON (`citrus.projector_spectral_run_plan` v1); see `examples/`. The gray pilot uses scenes Citrus has today (`uniform_gray`, one arena per position). The full-canvas plan needs the `canvas_fill` scene, which Citrus is adding.
 
 Unlike `pixi run log`, a calibration run never applies `calibration.json`, never bins and never corrects. Each run writes a bundle in `runs/<run_id>/`:
 

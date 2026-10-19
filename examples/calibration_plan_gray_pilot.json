@@ -22,8 +22,10 @@
   },
   "integration": {
     "initial_ms": 100,
-    "target_peak_fraction": 0.8,
-    "max_ms": 10000
+    "min_ms": 100,
+    "max_ms": 10000,
+    "frame_rate_hz": 120,
+    "target_peak_fraction": 0.8
   },
   "projector_off_background": false,
   "defaults": {
