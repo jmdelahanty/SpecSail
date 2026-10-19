@@ -86,6 +86,35 @@ pixi run clear
 
 Deletes all CSV files in `data/`.
 
+### Projector Calibration Runs
+
+```bash
+pixi run calrun examples/calibration_plan_gray_pilot.json --socket /tmp/citrus_local_control.sock
+pixi run calrun examples/calibration_plan_omnifin0_pass1.json --socket /tmp/citrus_local_control.sock
+```
+
+Measures a projector driven by [Citrus](https://github.com/JohnsonLabJanelia/citrus) position by position. For each probe position in the plan, the run:
+
+1. shows a placement target (crosshair overlay, or the dish outline for the gray pilot) and asks you to place the fiber;
+2. steps every patch through Citrus calibration scenes, waits until Citrus reports the patch on screen plus a settle time and a stability check, then records raw scans;
+3. records a projector-black dark at every integration time it used.
+
+Citrus is restored after every run, including after errors and Ctrl+C. Plans are JSON (`citrus.projector_spectral_run_plan` v1); see `examples/`. The gray pilot uses scenes Citrus has today (`uniform_gray`, one arena per position). The full-canvas plan needs the `canvas_fill` scene, which Citrus is adding.
+
+Unlike `pixi run log`, a calibration run never applies `calibration.json`, never bins and never corrects. Each run writes a bundle in `runs/<run_id>/`:
+
+```
+capture_context.json          # identities, citations, outcome, sha256 of every file
+run_plan.json
+instrument/device_readout.json  # wavelengths, dark pixels, nonlinearity coefficients, TEC, limits
+citrus/                       # Citrus status and canvas geometry at start and end
+measurements/<id>/spectrum.csv     # pixel,wavelength_nm,counts_scan_0,... (raw counts, native pixels)
+measurements/<id>/measurement.json # patch, scene status, integration, stability, saturation
+log.jsonl
+```
+
+Design: Citrus `docs/projector_spectral_calibration_run_design_2026-10-19.md`.
+
 ### Data Migration
 
 ```bash
@@ -126,9 +155,15 @@ specsail/
 ├── plot_spectra.py         # Plot CLI tool
 ├── save_results.py         # Save and archive results
 ├── migrate_data.py         # Legacy data migration
+├── calibration_run.py      # Projector calibration runs driven through Citrus
+├── citrus_control.py       # Citrus local control socket client
+├── spectral_capture.py     # Raw native-pixel capture (no calibration, no binning)
+├── examples/               # Calibration run plans
+├── tests/                  # Unit tests (pixi run test)
 ├── calibration.json        # Calibration coefficients (if created)
 ├── data/                   # Collected spectrum CSV files
-└── results/                # Saved plots and archived data
+├── results/                # Saved plots and archived data
+└── runs/                   # Calibration run bundles
 ```
 
 ## Dependencies

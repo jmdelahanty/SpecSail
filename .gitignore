@@ -6,6 +6,7 @@
 # data and results
 data/*
 results/*
+runs/*
 
 .claude/settings.local.json
 
