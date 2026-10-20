@@ -120,6 +120,8 @@ pixi run calrun runs/plans/PLAN.json --socket /tmp/citrus_local_control.sock
 - [ ] **Keep every window off the projector display.** The projector is part of the desktop, so a window dragged
       past the edge of the main screen lands on the canvas.
   - **Why:** a window dragged onto the projector for about a second cut one 10 s scan by 11% (2026-10-20).
+    Background on window stacking and presentation: Citrus
+    `docs/stimulus_window_stacking_and_presentation_2026-10-20.md` (Citrus PR #66).
 - [ ] **Stopping is safe.** Ctrl+C restores Citrus, and the bundle keeps everything measured so far, marked
       interrupted.
 - [ ] Glance at a spectrum now and then:
@@ -164,6 +166,8 @@ pixi run calrun runs/plans/PLAN.json --socket /tmp/citrus_local_control.sock
 ## Related reading
 
 - Citrus `docs/projector_spectral_calibration_run_design_2026-10-19.md`: design of the run.
+- Citrus `docs/stimulus_window_stacking_and_presentation_2026-10-20.md`: why a window can cover the canvas, and
+  how frames reach the projector.
 - hardware_library `docs/learning/`:
   - video range, TV timings and dithering;
   - cosine correctors and fiber collection;
