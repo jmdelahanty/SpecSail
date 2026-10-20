@@ -120,6 +120,9 @@ pixi run calrun runs/plans/PLAN.json --socket /tmp/citrus_local_control.sock
 - [ ] **Keep every window off the projector display.** The projector is part of the desktop, so a window dragged
       past the edge of the main screen lands on the canvas.
   - **Why:** a window dragged onto the projector for about a second cut one 10 s scan by 11% (2026-10-20).
+- [ ] **Don't take desktop screenshots, open the Activities overview or lock the screen during a run.** GNOME's
+      screenshot tool dims every monitor, the projector included.
+  - **Why:** a screenshot during a green patch cut one scan by 27% (2026-10-20).
     Background on window stacking and presentation: Citrus
     `docs/stimulus_window_stacking_and_presentation_2026-10-20.md` (Citrus PR #66).
 - [ ] **Stopping is safe.** Ctrl+C restores Citrus, and the bundle keeps everything measured so far, marked
