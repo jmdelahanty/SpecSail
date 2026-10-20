@@ -138,8 +138,10 @@ ids echoed; bundle contents.
 - **Settle:** Orange waits until CLOCK_REALTIME ≥ visible_from + `settle_ms` (500) before opening the cameras, then
   checks every kept frame's exposure-start bound.
 - **Display cadence:** the request carries `expected_display_hz` (120) and a tolerance, with policy `record` or
-  `refuse`. Orange always records the Hz it measures from `current_display_frame`. This is the only check that could
-  catch 60 Hz composited presentation.
+  `refuse`. Orange always records the Hz it measures from `current_display_frame`. This is a liveness and stall
+  check only. `current_display_frame` counts Citrus's own swaps (a 120.000 Hz limiter, swap interval 0), so it
+  reads 120 Hz even when presentation is composited. Measure over ≥10 s, because the socket snapshot is rebuilt
+  every 100 ms. Only a photodiode or a window-stacking record can detect compositing.
 - **Light sanity:** Orange compares each fill's 8×8 tiles with the latest reference fill and warns
   `possible_occlusion` (a window or shell dimming). It warns, never refuses. SpecSail should surface the warning to
   the operator.
@@ -161,6 +163,8 @@ SpecSail's obligations:
 
 Still open:
 
-- citrus-agent to confirm that `visible_from_display_frame_swap_end_epoch_ns` is CLOCK_REALTIME, and that it and
-  `current_display_frame` are readable without a transaction.
+- Confirmed by citrus-agent (Citrus 25c31f5):
+  - `visible_from_display_frame_swap_end_epoch_ns` is CLOCK_REALTIME, taken right after `glfwSwapBuffers` returns
+    for the fence frame. It marks the swap-call return, not light.
+  - `calibration_scene_status` needs no transaction. Each read needs a fresh `request_id`.
 - The sudo wrapper's allow-list may need Data2 (Jeremy).
