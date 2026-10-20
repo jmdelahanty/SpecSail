@@ -15,6 +15,8 @@ clear = "rm -f data/*.csv"
 migrate = "python -u migrate_data.py"
 calrun = "python -u calibration_run.py"
 test = "python -m unittest discover -s tests -t ."
+monitor = "python -u -m run_monitor"
+watch = "python -u -m run_monitor.watch"
 
 [dependencies]
 seabreeze = ">=2.11.0,<3"
