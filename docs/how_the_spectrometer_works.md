@@ -34,6 +34,22 @@ out by wavelength at the grating, focused onto the detector, and counted by the 
 wavelength is drawn from a real measurement, so the bars grow into that measurement's spectrum. It plays white,
 then the red, green and blue primaries. The movie is not committed (several MB); render it from any run.
 
+### Why a sensor's angle response matters
+
+```bash
+pixi run animate-cosine --out cosine_response.mp4
+```
+
+renders a 2D schematic movie (about 40 s):
+
+- simulated rays leave a diffusing film at all angles and reach an ideal flat surface (true irradiance), a recessed,
+  windowed photodiode head (like a power-meter head), a cosine corrector and a bare fiber;
+- counters show each detector's total relative to the ideal surface;
+- then a parallel beam sweeps from straight on to grazing, plotting each detector's response against cos θ.
+
+It shows why a photodiode head under-counts steep light from a diffuser, why a cosine corrector fixes that, and why a
+bare fiber sees only a narrow cone. The geometry is chosen to show the effect, not to model a specific product.
+
 ## 2. From raw counts to "counts per second per pixel"
 
 ![From raw counts to counts per second](img/explain_spectrum_example.png)
