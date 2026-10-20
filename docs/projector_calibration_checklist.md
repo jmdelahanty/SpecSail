@@ -83,6 +83,11 @@ Rig-specific values below are for **omnifin0** on **pancake0**: BenQ X3100i proj
 
 - [ ] Fiber **perpendicular** to the surface: the **bubble centred**.
 - [ ] Tip about **1 mm** above the surface (or the standoff your plan states), the **same at every arena**.
+- [ ] **Spectrometer on a stable surface at about shelf height, its fiber cable slack and taped 5–15 cm behind the
+      connector. Never move the box or touch the connector during a run.**
+  - **Why:** the fiber end sits against a slit about as wide as its 50 µm core. Reseating the connector moved white by up
+    to 3× with a taut cable, and 12% with a slack one. Nudging the box between arenas dropped the level about 3.5×
+    mid-run (2026-10-20).
 - [ ] **Cable taped to the arm**, with a little slack between the tape and the connector, so no cable weight
       hangs on the tip.
   - **Why:** a free cable loop can slowly lever the tip over minutes.
