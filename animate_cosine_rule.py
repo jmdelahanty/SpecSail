@@ -254,14 +254,22 @@ def main():
                             artists.append(ax.plot([end[0], x_face], [top_y, sy], color=BEAM, lw=1.4)[0])
                     else:
                         artists.append(ax.plot([start[0], end[0]], [start[1], end[1]], color=BEAM, lw=1.4)[0])
-                        # scrambled inside the diffuser
+                        # scrambled inside the diffuser: a zig-zag that forgets the arrival direction and ends
+                        # on the detector under the disc (same path every frame, so it doesn't flicker)
+                        walk_rng = np.random.default_rng(int(round((k + 1) * 1000)))
                         p = end.copy()
-                        for _ in range(3):
-                            q = p + rng.normal(0, 0.12, 2)
-                            q[0] = np.clip(q[0], centre - 0.48, centre + 0.48)
-                            q[1] = np.clip(q[1], sy - 0.08, sy + 0.33)
-                            artists.append(ax.plot([p[0], q[0]], [p[1], q[1]], color=BEAM, lw=0.8, alpha=0.7)[0])
+                        bottom = sy - 0.08
+                        for step in range(4):
+                            last = step == 3
+                            q = np.array([np.clip(p[0] + walk_rng.normal(0, 0.18), centre - 0.46, centre + 0.46),
+                                          bottom if last else walk_rng.uniform(bottom + 0.05, sy + 0.3)])
+                            artists.append(ax.plot([p[0], q[0]], [p[1], q[1]], color=BEAM, lw=0.9, alpha=0.8)[0])
                             p = q
+            artists.append(ax.plot([cx - 0.5, cx + 0.5], [sy - 0.1, sy - 0.1], color=CC, lw=5,
+                                   solid_capstyle="butt")[0])
+            artists.append(ax.text(cx, sy - 2.15, "inside the disc the light is scrambled, so the detector\n"
+                                   "below gets a share that doesn't depend on the arrival angle",
+                                   ha="center", va="top", fontsize=9, color=CC))
             artists.append(ax.text(4.0, 4.9, f"beam at θ = {theta:.0f}°", ha="center", fontsize=14,
                                    weight="bold"))
             artists.append(ax.text(hx, 4.2, f"{100 * head_response(th) / max(np.cos(th), 1e-3):.0f}% of ideal",
