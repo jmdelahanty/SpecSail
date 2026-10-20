@@ -115,6 +115,55 @@ log.jsonl
 
 Design: Citrus `docs/projector_spectral_calibration_run_design_2026-10-19.md`.
 
+### Power Meter Session
+
+```bash
+pixi run powerrun examples/power_meter_plan_omnifin0.json --socket /tmp/citrus_local_control.sock
+pixi run powerrun examples/power_meter_plan_omnifin0.json --manual   # type readings (µW) by hand
+```
+
+Measures absolute power at each arena centre with a Thorlabs PM100USB and a photodiode head (the example plan is
+for an S130VC). Citrus fills the whole canvas with one colour at a time. At each position the session reads a white
+drift fill at the start and end, every fill in the plan, and black (the offset: sensor dark current, projector
+black and room light).
+
+Before the first session, give your user access to the meter (once, with sudo):
+
+```bash
+printf '%s\n' \
+  'SUBSYSTEM=="usbmisc", KERNEL=="usbtmc*", ATTRS{idVendor}=="1313", MODE="0660", GROUP="plugdev"' \
+  'SUBSYSTEM=="usb", ATTRS{idVendor}=="1313", MODE="0660", GROUP="plugdev"' \
+  | sudo tee /etc/udev/rules.d/60-thorlabs-power-meter.rules
+sudo udevadm control --reload-rules
+```
+
+The meter then appears as `/dev/usbtmcN`, and the session talks SCPI to it directly (no extra packages).
+
+Checklist:
+
+- Plug the meter in **after** spectrometer runs finish, not during one.
+- The head's sliding ND filter matches the plan (`sensor.nd_filter`, normally `open`). The session asks you to
+  confirm it.
+- At each prompt, lay the sensor flat, **face down onto the light**, centred on the arena's crosshair. Nothing else on
+  the shelf.
+- Keep every window off the projector, and take no screenshots: GNOME dims the projector for both.
+- The plan's `sensor.aperture_diameter_mm` has no default. Record where the value came from in
+  `aperture_provenance`; irradiance is marked provisional until that text starts with `confirmed`.
+
+Output: `runs/<plan_id>_<UTC>/power_meter/session.json` (plan, meter and sensor identity, operator answers, every
+reading with its time, the Citrus scene status per fill) and `summary.csv` (per position and fill: mean and sd in W,
+mean minus black, irradiance in µW/cm²).
+
+The meter assumes all light is at the fill's `wavelength_nm`. That is close for one LED primary read at its peak. For
+white and grays it is a placeholder: correct it with the SpecSail spectrum of the same fill and the sensor's
+responsivity curve,
+
+```
+P_true = P_read × R(λ_set) × ∫S(λ)dλ / ∫S(λ)R(λ)dλ
+```
+
+where S is the measured spectrum and R the sensor's responsivity. Readings are at the film plane, not the fish plane.
+
 ### Data Migration
 
 ```bash
@@ -157,6 +206,8 @@ specsail/
 ├── migrate_data.py         # Legacy data migration
 ├── calibration_run.py      # Projector calibration runs driven through Citrus
 ├── citrus_control.py       # Citrus local control socket client
+├── power_meter.py          # Thorlabs PM100USB over USBTMC (SCPI)
+├── power_session.py        # Power meter session driven through Citrus
 ├── spectral_capture.py     # Raw native-pixel capture (no calibration, no binning)
 ├── examples/               # Calibration run plans
 ├── tests/                  # Unit tests (pixi run test)

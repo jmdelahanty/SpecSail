@@ -1,0 +1,151 @@
+{
+  "schema_id": "specsail.power_meter_plan",
+  "schema_version": 1,
+  "plan_id": "omnifin0_shadow_power_meter_v1",
+  "rig_id": "omnifin0",
+  "canvas_name": "shadow",
+  "arena_ids": [
+    "arena_1",
+    "arena_2",
+    "arena_3",
+    "arena_4"
+  ],
+  "positions": [
+    {
+      "position_id": "arena_1_center",
+      "arena_id": "arena_1"
+    },
+    {
+      "position_id": "arena_2_center",
+      "arena_id": "arena_2"
+    },
+    {
+      "position_id": "arena_3_center",
+      "arena_id": "arena_3"
+    },
+    {
+      "position_id": "arena_4_center",
+      "arena_id": "arena_4"
+    }
+  ],
+  "drift_fill": {
+    "fill_id": "white_drift",
+    "rgba8": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "wavelength_nm": 550,
+    "note": "single-wavelength placeholder; correct with SpecSail spectra"
+  },
+  "fills": [
+    {
+      "fill_id": "white_255",
+      "rgba8": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "wavelength_nm": 550,
+      "note": "single-wavelength placeholder; correct with SpecSail spectra"
+    },
+    {
+      "fill_id": "red_255",
+      "rgba8": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "wavelength_nm": 629,
+      "note": "red LED peak (SpecSail 2026-10-19)"
+    },
+    {
+      "fill_id": "green_255",
+      "rgba8": [
+        0,
+        255,
+        0,
+        255
+      ],
+      "wavelength_nm": 530,
+      "note": "green hump peak near 531 nm; broad, correct with spectra"
+    },
+    {
+      "fill_id": "blue_255",
+      "rgba8": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "wavelength_nm": 456,
+      "note": "blue LED peak (SpecSail 2026-10-19)"
+    },
+    {
+      "fill_id": "gray_178_protocol",
+      "rgba8": [
+        178,
+        178,
+        178,
+        255
+      ],
+      "wavelength_nm": 550,
+      "note": "single-wavelength placeholder; correct with SpecSail spectra"
+    },
+    {
+      "fill_id": "gray_089_protocol",
+      "rgba8": [
+        89,
+        89,
+        89,
+        255
+      ],
+      "wavelength_nm": 550,
+      "note": "single-wavelength placeholder; correct with SpecSail spectra"
+    },
+    {
+      "fill_id": "gray_077_protocol",
+      "rgba8": [
+        77,
+        77,
+        77,
+        255
+      ],
+      "wavelength_nm": 550,
+      "note": "single-wavelength placeholder; correct with SpecSail spectra"
+    },
+    {
+      "fill_id": "black",
+      "rgba8": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "wavelength_nm": 550,
+      "note": "offset: sensor dark + projector black + room light"
+    }
+  ],
+  "readings_per_fill": 10,
+  "average_count": 100,
+  "settle_s": 2,
+  "sensor": {
+    "model": "S130VC",
+    "serial_expected": "unknown (read from the head at preflight; then fill in)",
+    "aperture_diameter_mm": 9.5,
+    "aperture_provenance": "S130C family spec; S130VC unconfirmed",
+    "nd_filter": "open"
+  },
+  "meter": {
+    "model": "PM100USB",
+    "serial_expected": "M01326168"
+  },
+  "notes": [
+    "Lay the S130VC flat, face down onto the light, on the arena crosshair; nothing else on the shelf.",
+    "Readings are at the film plane, not the fish plane.",
+    "sensor.serial_expected \"unknown...\" skips the sensor serial check and records what the head reports; fill it in afterwards so later sessions check it."
+  ]
+}
