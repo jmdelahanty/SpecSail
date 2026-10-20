@@ -1,7 +1,9 @@
 # Sketch: camera brightness maps under a held Citrus scene
 
-Status: design sketch, 2026-10-20. Nothing implemented. The Orange side is being scoped by the Orange agent; the
-request/response fields below are a proposal to align with it.
+Status: design sketch, 2026-10-20. Nothing implemented. Aligned with Orange's scope: branch
+agent/calibration/scene-brightness-capture-20261020, commit 71a75f4,
+`docs/scene_brightness_capture_scope_2026_10_20.md`. Orange's doc is authoritative for the request and result
+schemas.
 
 ## Goal
 
@@ -59,7 +61,7 @@ the spectrometer is optional (`with_spectrometer`).
 ```
 
 `patches` keeps its current meaning: the fills to show, for example white, R/G/B at 255, a gray ramp and the
-protocol grays. Black (projector black) and a lens-cap dark phase come from Orange.
+protocol grays. Projected black is a SpecSail fill (kind `projected_black`); the lens-cap dark is an Orange operator step.
 
 ## Flow per fill
 
@@ -106,8 +108,8 @@ SpecSail                              Citrus                      Orange
 ## Implementation outline (SpecSail)
 
 1. `load_plan`: validate `camera_maps`.
-2. `OrangeClient` (new): calls Orange's request (CLI or local-control socket, per Orange's design) and parses the
-   outcome.
+2. `OrangeClient` (new): writes the request JSON, runs Orange's CLI with a timeout, and reads the result file and
+   exit code.
 3. `CameraMapRun` (or a mode of `CalibrationRun`): for each fill, `scenes.show(rgba)`, then the Orange request, then
    the optional spectrometer measurement, then record.
 4. `tests/fakes.py`: a `FakeOrange` that reads `FakeCitrus` status and can return `same_scene`, `changed_scene` or
@@ -116,9 +118,49 @@ SpecSail                              Citrus                      Orange
 Tests: outcome handling; refusing to continue on `changed_scene`; the scene never changing before the outcome arrives;
 ids echoed; bundle contents.
 
-## Open questions for Orange
+## Agreed with Orange (2026-10-20)
 
-1. CLI or local-control method? SpecSail can call either.
-2. The exposure policy: SpecSail-supplied ladder, or Orange's target-DN search?
-3. The timeout to expect for 8 frames × 4 cameras at long exposures.
-4. Where SpecSail finds the outputs, and whether Orange returns the maps (block means) directly for the run log.
+- **Interface: a CLI.** `scripts/run_scene_brightness_capture.py --request req.json --result out.json`.
+  - The result file is always written.
+  - Exit codes: 0 `same_scene`, 3 `changed_scene`, 2 `refused`, 1 error.
+  - It needs the Orange GUI closed (otherwise it refuses with `rig_process_active`) and opens no window.
+- **Request fields:**
+  - under `citrus`: `expected_transaction_id`, `expected_scene_revision`, `expected_content_fingerprint`, exactly as
+    Citrus reported them;
+  - under `condition`: `kind`, `shelf_state`, `filter_state`, `focus_state`, `ir_arrays`, `is_reference_fill`,
+    `rgba8`, `label`;
+  - under `specsail`: run id, step id, `plan_digest`.
+- **Projected black is SpecSail's.** SpecSail shows canvas_fill (0,0,0,255) and calls Orange with
+  `condition.kind = "projected_black"`. The lens-cap dark (`"lens_capped_dark"`) is an Orange operator step that
+  skips the Citrus checks.
+- **Exposure:** `target_dn` with [30, 220]. Orange probes, then confirms, giving each camera its own exposure.
+  `ladder` with SpecSail-supplied `exposures_us` is also available.
+- **Settle:** Orange waits until CLOCK_REALTIME ≥ visible_from + `settle_ms` (500) before opening the cameras, then
+  checks every kept frame's exposure-start bound.
+- **Display cadence:** the request carries `expected_display_hz` (120) and a tolerance, with policy `record` or
+  `refuse`. Orange always records the Hz it measures from `current_display_frame`. This is the only check that could
+  catch 60 Hz composited presentation.
+- **Light sanity:** Orange compares each fill's 8×8 tiles with the latest reference fill and warns
+  `possible_occlusion` (a window or shell dimming). It warns, never refuses. SpecSail should surface the warning to
+  the operator.
+- **Iris:** only the first capture in a session re-homes it; later ones leave the lens untouched (still being
+  verified in Orange code). The reference fills catch drift.
+- **Timeout:** about 180 s per request with target_dn (estimated; the result carries wall times to tighten it).
+- **Outputs:** `/mnt/Data2/calibrations/scene_brightness/<specsail_run_id>/<step_id>/`.
+  - `condition.json` is the result object: per-camera stats (mean, p01/p99, fractions at 0/255, temporal sigma,
+    in_band), the 8×8 centre-normalised tiles inline, verbatim pre/post scene status plus one display status, frame
+    ids, PTP times, read-back, and sha256 for every file.
+  - Full block-16 maps and raw frames are files only.
+  - SpecSail copies the tiles and stats into its run log.
+
+SpecSail's obligations:
+
+- hold the scene from `presented` until Orange returns, with no scene command in between;
+- pass the ids verbatim;
+- never call Orange while the Orange GUI is open.
+
+Still open:
+
+- citrus-agent to confirm that `visible_from_display_frame_swap_end_epoch_ns` is CLOCK_REALTIME, and that it and
+  `current_display_frame` are readable without a transaction.
+- The sudo wrapper's allow-list may need Data2 (Jeremy).
