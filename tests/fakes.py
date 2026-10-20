@@ -251,9 +251,11 @@ class FakeCitrus:
 
 
     def _arena_fills_request_error(self, arena_ids, options):
-        """Request-level refusals, as the Citrus arena_fills (C7) socket validation returns them."""
-        if sorted(arena_ids) != sorted(self.arenas) or len(set(arena_ids)) != len(arena_ids):
-            return "arena_fills_requires_all_arenas"
+        """
+        Request-level refusals in the order Citrus arena_fills (C7) checks them:
+        option parsing first (unknown key, fill map type, colours in sorted arena
+        order, background, domain), then the arena set, then unknown arenas.
+        """
         allowed = {"arena_fill_rgba_u8", "background_rgba_u8", "domain", "placement_overlay",
                    "probe_targets", "active_target"}
         for key in options:
@@ -262,17 +264,22 @@ class FakeCitrus:
         fills = options.get("arena_fill_rgba_u8", {})
         if not isinstance(fills, dict):
             return "arena_fills_arena_fill_rgba_u8_must_be_object"
-        valid = lambda c: (isinstance(c, list) and len(c) == 4 and c[3] == 255 and
-                           all(isinstance(v, int) and 0 <= v <= 255 for v in c))
-        for arena_id, rgba in fills.items():
-            if arena_id not in arena_ids:
-                return f"arena_fills_unknown_arena:{arena_id}"
-            if not valid(rgba):
+        channel = lambda v: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 255
+        valid = lambda c: isinstance(c, list) and len(c) == 4 and all(channel(v) for v in c) and c[3] == 255
+        for arena_id in sorted(fills):
+            if not valid(fills[arena_id]):
                 return f"arena_fills_rgba_invalid:{arena_id}"
         if "background_rgba_u8" in options and not valid(options["background_rgba_u8"]):
             return "arena_fills_background_invalid"
         if options.get("domain", "full_arena_unmasked") not in ("full_arena_unmasked", "experimental_area_masked"):
             return "arena_fills_domain_invalid"
+        if "placement_overlay" in options and not isinstance(options["placement_overlay"], bool):
+            return "scene_options_placement_overlay_must_be_bool"
+        if sorted(arena_ids) != sorted(self.arenas) or len(set(arena_ids)) != len(arena_ids):
+            return "arena_fills_requires_all_arenas"
+        for arena_id in sorted(fills):
+            if arena_id not in arena_ids:
+                return f"arena_fills_unknown_arena:{arena_id}"
         return None
 
     def _canvas_fill_request_error(self, arena_ids, options):
