@@ -23,6 +23,17 @@ A teaching note for reading SpecSail calibration-run data. The examples come fro
 Pixels **0–3 and 1040–1043** are covered with metal and never see light. Their reading is the detector's
 electrical baseline.
 
+### As a movie
+
+```bash
+pixi run animate runs/<run_id> --position arena_1_center --out light_path.mp4
+```
+
+renders a short animation (about 32 s, needs ffmpeg): simulated photons leave the fiber, pass the slit, are fanned
+out by wavelength at the grating, focused onto the detector, and counted by the pixel they land on. Each photon's
+wavelength is drawn from a real measurement, so the bars grow into that measurement's spectrum. It plays white,
+then the red, green and blue primaries. The movie is not committed (several MB); render it from any run.
+
 ## 2. From raw counts to "counts per second per pixel"
 
 ![From raw counts to counts per second](img/explain_spectrum_example.png)
