@@ -43,7 +43,10 @@ from citrus_control import CitrusControl, CitrusControlError
 PLAN_SCHEMA_ID = "citrus.projector_spectral_run_plan"
 CAPTURE_CONTEXT_SCHEMA_ID = "citrus.projector_spectral_capture_context"
 MEASUREMENT_SCHEMA_ID = "specsail.calibration_run.measurement"
-SCENE_BACKENDS = ("canvas_fill", "uniform_gray")
+SCENE_BACKENDS = ("canvas_fill", "uniform_gray", "arena_fills")
+ARENA_FILL_PATTERNS = ("all", "target_only", "all_but_target")
+ARENA_FILL_DOMAINS = ("full_arena_unmasked", "experimental_area_masked")
+ARENA_FILL_BACKGROUNDS = ("black", "patch")
 TARGET_PLANES = ("projected_surface", "estimated_fish_plane")
 ROLES = (
     "projector_red_primary", "projector_green_primary", "projector_blue_primary",
@@ -144,6 +147,22 @@ def load_plan(path):
         offset = pos.get("offset_mm", [0.0, 0.0])
         if not (isinstance(offset, list) and len(offset) == 2):
             errors.append(f"position {pid}: offset_mm must be [x, y]")
+        if "pattern" in pos:
+            if plan.get("scene_backend") != "arena_fills":
+                errors.append(f"position {pid}: pattern needs scene_backend arena_fills")
+            elif pos["pattern"] not in ARENA_FILL_PATTERNS:
+                errors.append(f"position {pid}: pattern must be one of {ARENA_FILL_PATTERNS}")
+
+    fills = plan.get("arena_fills", {})
+    if "arena_fills" in plan and plan.get("scene_backend") != "arena_fills":
+        errors.append("arena_fills settings need scene_backend arena_fills")
+    elif not isinstance(fills, dict):
+        errors.append("arena_fills must be an object")
+    else:
+        if fills.get("domain", "full_arena_unmasked") not in ARENA_FILL_DOMAINS:
+            errors.append(f"arena_fills.domain must be one of {ARENA_FILL_DOMAINS}")
+        if fills.get("background", "black") not in ARENA_FILL_BACKGROUNDS:
+            errors.append(f"arena_fills.background must be one of {ARENA_FILL_BACKGROUNDS}")
 
     seen = set()
     for patch in plan.get("patches") or []:
@@ -313,6 +332,86 @@ class UniformGrayScenes(CanvasFillScenes):
         self.finish()
 
 
+class ArenaFillsScenes(CanvasFillScenes):
+    """
+    Per-arena fills (Citrus ``arena_fills``, C7) for stray-light and crosstalk tests.
+
+    One transaction owns every arena, so no preview can leak in. Each position
+    sets a pattern: ``all`` lights every arena, ``target_only`` lights only the
+    position's arena, ``all_but_target`` lights every other arena and holds the
+    position's arena black. Arenas left out of the fill map are black by
+    construction in Citrus. ``arena_fills.background`` sets the gaps between
+    arenas: ``black`` (default) or ``patch`` (the patch colour, which with
+    pattern ``all`` reproduces ``canvas_fill``).
+    """
+
+    recipe_id = "arena_fills"
+
+    def __init__(self, citrus, plan, run_id):
+        super().__init__(citrus, plan, run_id)
+        settings = plan.get("arena_fills", {})
+        self.domain = settings.get("domain", "full_arena_unmasked")
+        self.background = settings.get("background", "black")
+
+    @staticmethod
+    def lit_arenas(arena_ids, position, pattern):
+        target = position["arena_id"] if position else None
+        if pattern == "target_only":
+            return [a for a in arena_ids if a == target]
+        if pattern == "all_but_target":
+            return [a for a in arena_ids if a != target]
+        return list(arena_ids)
+
+    def _fills(self, rgba8, position, pattern):
+        lit = self.lit_arenas(self.plan["arena_ids"], position, pattern)
+        fills = {a: list(rgba8) for a in lit}
+        background = list(rgba8) if self.background == "patch" else [0, 0, 0, 255]
+        return fills, background
+
+    def _set_fills(self, rgba8, overlay, position, pattern):
+        fills, background = self._fills(rgba8, position, pattern)
+        options = {
+            "arena_fill_rgba_u8": fills,
+            "background_rgba_u8": background,
+            "domain": self.domain,
+            "placement_overlay": overlay,
+            "probe_targets": self.targets,
+            "active_target": position["position_id"] if position else None,
+        }
+        request_id, operation_id = self.citrus.set_scene(
+            self.transaction_id, self.recipe_id, self.plan["arena_ids"], options)
+        self.requested = True
+        status = self.citrus.wait_for_state(request_id, operation_id, "presented")
+        self.active = True
+        return status, request_id, operation_id, fills, background
+
+    def placement(self, position):
+        # Every arena lit white so the overlay is visible wherever the fiber goes.
+        status, *_ = self._set_fills([255, 255, 255, 255], True, position, "all")
+        return status
+
+    def show(self, rgba8, position):
+        pattern = position.get("pattern", "all") if position else "all"
+        status, request_id, operation_id, fills, background = self._set_fills(
+            rgba8, False, position, pattern)
+        state = status.get("arena_fills")
+        if not isinstance(state, dict):
+            raise RunAborted("Citrus status has no arena_fills object: this Citrus build lacks C7")
+        if state.get("placement_overlay") is not False:
+            raise RunAborted("Citrus reports the placement overlay is still on; refusing to capture")
+        if list(state.get("background_rgba_u8", [])) != background:
+            raise RunAborted(f"Citrus background {state.get('background_rgba_u8')}, expected {background}")
+        shown = {a.get("arena_id"): list(a.get("rgba_u8", [])) for a in state.get("arenas", [])}
+        for arena_id in self.plan["arena_ids"]:
+            expected = fills.get(arena_id, [0, 0, 0, 255])
+            if shown.get(arena_id) != expected:
+                raise RunAborted(f"Citrus shows {shown.get(arena_id)} in {arena_id}, expected {expected}")
+        record = self._scene_record(status, request_id, operation_id)
+        record.update(pattern=pattern, arena_fill_rgba_u8=fills, background_rgba_u8=background,
+                      domain=self.domain)
+        return record
+
+
 # ---------------------------------------------------------------------------
 # Operator
 # ---------------------------------------------------------------------------
@@ -432,7 +531,8 @@ class CalibrationRun:
         self.run_id = run_id or f"{plan['plan_id']}_{stamp}"
         citrus.run_id = self.run_id
         self.bundle = Bundle(Path(out_dir) / self.run_id)
-        backend = UniformGrayScenes if plan["scene_backend"] == "uniform_gray" else CanvasFillScenes
+        backend = {"uniform_gray": UniformGrayScenes,
+                   "arena_fills": ArenaFillsScenes}.get(plan["scene_backend"], CanvasFillScenes)
         self.scenes = backend(citrus, plan, self.run_id)
         self.measurements = []
         self.observations = []

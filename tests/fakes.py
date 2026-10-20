@@ -38,12 +38,14 @@ class FakeCitrus:
 
     def __init__(self, arenas=("arena_1", "arena_2", "arena_3", "arena_4"),
                  canvas_fill_supported=True, overlay_stuck=False, present_after_polls=2,
-                 controller_reject=None):
+                 controller_reject=None, arena_fills_supported=True, stray_fraction=0.0):
         self.arenas = list(arenas)
         self.canvas_fill_supported = canvas_fill_supported
         self.overlay_stuck = overlay_stuck
         self.present_after_polls = present_after_polls
         self.controller_reject = controller_reject
+        self.arena_fills_supported = arena_fills_supported
+        self.stray_fraction = stray_fraction
         self.lock = threading.Lock()
         self.requests = []
         self.active_transaction = None
@@ -73,10 +75,17 @@ class FakeCitrus:
         self._thread.join(timeout=2)
 
     def brightness(self, arena_id=None):
-        """Mean commanded drive (0-1) of what is shown; the fake spectrometer uses it."""
+        """
+        Mean commanded drive (0-1) of what is shown at ``arena_id``; the fake
+        spectrometer uses it. ``stray_fraction`` of every other arena's drive is
+        added, a crude model of light reaching one arena from the others.
+        """
         with self.lock:
-            rgba = self.rgba_by_arena.get(arena_id or self.arenas[0], [0, 0, 0, 255])
-            return sum(rgba[:3]) / (3 * 255.0)
+            target = arena_id or self.arenas[0]
+            level = lambda a: sum(self.rgba_by_arena.get(a, [0, 0, 0, 255])[:3]) / (3 * 255.0)
+            own = level(target)
+            stray = sum(level(a) for a in self.arenas if a != target)
+            return own + self.stray_fraction * stray
 
     def _serve(self):
         while not self._stop:
@@ -152,6 +161,12 @@ class FakeCitrus:
         if self.target_set and sorted(arena_ids) != self.target_set:
             self._command(req, "rejected", "calibration_scene_target_set_changed")
             return self._response(req)
+        if recipe == "arena_fills" and not self.arena_fills_supported:
+            return self._response(req, accepted=False, error="unsupported_calibration_scene_recipe")
+        if recipe == "arena_fills":
+            error = self._arena_fills_request_error(arena_ids, options)
+            if error:
+                return self._response(req, accepted=False, error=error)
         if recipe == "canvas_fill" and not self.canvas_fill_supported:
             return self._response(req, accepted=False, error="unsupported_calibration_scene_recipe")
         if recipe == "canvas_fill":
@@ -168,6 +183,7 @@ class FakeCitrus:
         self.scene["recipe_id"] = recipe
         self.scene["scene_revision"] += 1
         self.scene.pop("canvas_fill", None)
+        self.scene.pop("arena_fills", None)
         self.scene["resolved_targets"] = [{"arena_id": a} for a in arena_ids]
         if recipe == "canvas_fill":
             rgba = list(options["foreground_rgba_u8"])
@@ -189,6 +205,33 @@ class FakeCitrus:
                                       "reason": "drawn_only_while_a_protocol_runs"},
             }
             self.rgba_by_arena = {a: rgba for a in self.arenas}
+        elif recipe == "arena_fills":
+            fills = options.get("arena_fill_rgba_u8", {})
+            background = list(options.get("background_rgba_u8", [0, 0, 0, 255]))
+            overlay = bool(options.get("placement_overlay")) or self.overlay_stuck
+            domain = options.get("domain", "full_arena_unmasked")
+            arenas = []
+            for a in self.arenas:
+                rgba = list(fills.get(a, [0, 0, 0, 255]))
+                lit = any(v > 0 for v in rgba[:3])
+                arenas.append({
+                    "arena_id": a, "rgba_u8": rgba, "lit": lit,
+                    "semantic_role": "physical_target_transmitted_light" if lit else "physical_target_held_dark",
+                    "coordinate_target": False,
+                    "illumination_domain": "configured_arena_rectangle" if domain == "full_arena_unmasked"
+                    else "experimental_area",
+                    "mask_policy": domain,
+                    "photometry": {"command_encoding": "framebuffer_rgb_u8", "alpha_semantics": "opaque"},
+                })
+                self.rgba_by_arena[a] = rgba
+            self.scene["arena_fills"] = {
+                "domain": domain, "background_rgba_u8": background,
+                "placement_overlay": overlay,
+                "overlay_line_rule": "per_pixel_black_if_underlying_rec709_luma_ge_128_else_white" if overlay else None,
+                "probe_targets": options.get("probe_targets", []),
+                "active_target": options.get("active_target"),
+                "arenas": arenas,
+            }
         elif recipe == "uniform_gray":
             gray = options.get("foreground_gray_u8", 76)
             for target in self.scene["resolved_targets"]:
@@ -206,6 +249,38 @@ class FakeCitrus:
         self.polls_left = self.present_after_polls
         return self._response(req)
 
+
+    def _arena_fills_request_error(self, arena_ids, options):
+        """
+        Request-level refusals in the order Citrus arena_fills (C7) checks them:
+        option parsing first (unknown key, fill map type, colours in sorted arena
+        order, background, domain), then the arena set, then unknown arenas.
+        """
+        allowed = {"arena_fill_rgba_u8", "background_rgba_u8", "domain", "placement_overlay",
+                   "probe_targets", "active_target"}
+        for key in options:
+            if key not in allowed:
+                return f"scene_options_unknown_key:{key}"
+        fills = options.get("arena_fill_rgba_u8", {})
+        if not isinstance(fills, dict):
+            return "arena_fills_arena_fill_rgba_u8_must_be_object"
+        channel = lambda v: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 255
+        valid = lambda c: isinstance(c, list) and len(c) == 4 and all(channel(v) for v in c) and c[3] == 255
+        for arena_id in sorted(fills):
+            if not valid(fills[arena_id]):
+                return f"arena_fills_rgba_invalid:{arena_id}"
+        if "background_rgba_u8" in options and not valid(options["background_rgba_u8"]):
+            return "arena_fills_background_invalid"
+        if options.get("domain", "full_arena_unmasked") not in ("full_arena_unmasked", "experimental_area_masked"):
+            return "arena_fills_domain_invalid"
+        if "placement_overlay" in options and not isinstance(options["placement_overlay"], bool):
+            return "scene_options_placement_overlay_must_be_bool"
+        if sorted(arena_ids) != sorted(self.arenas) or len(set(arena_ids)) != len(arena_ids):
+            return "arena_fills_requires_all_arenas"
+        for arena_id in sorted(fills):
+            if arena_id not in arena_ids:
+                return f"arena_fills_unknown_arena:{arena_id}"
+        return None
 
     def _canvas_fill_request_error(self, arena_ids, options):
         """Request-level refusals, as the Citrus C6 socket validation returns them."""
