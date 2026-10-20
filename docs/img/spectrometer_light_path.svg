@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 520" font-family="Helvetica, Arial, sans-serif" font-size="14">
+  <title>Light path inside a crossed Czerny-Turner spectrometer (QE Pro)</title>
+  <defs>
+    <linearGradient id="spectrum" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0.00" stop-color="#6a00a8"/>
+      <stop offset="0.10" stop-color="#3b2bd6"/>
+      <stop offset="0.20" stop-color="#1f7be0"/>
+      <stop offset="0.28" stop-color="#18b26b"/>
+      <stop offset="0.36" stop-color="#b7d81f"/>
+      <stop offset="0.43" stop-color="#ffd21a"/>
+      <stop offset="0.50" stop-color="#ff7a1a"/>
+      <stop offset="0.60" stop-color="#e3261f"/>
+      <stop offset="0.70" stop-color="#8f0f12"/>
+      <stop offset="1.00" stop-color="#3a1a1a"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="520" fill="#ffffff"/>
+  <!-- housing -->
+  <rect x="150" y="40" width="660" height="340" rx="14" fill="#f4f5f7" stroke="#9aa0a8" stroke-width="2"/>
+  <text x="165" y="64" fill="#555" font-size="13">QE Pro housing (light-tight, detector cooled to about −10 °C)</text>
+
+  <!-- fiber and slit -->
+  <rect x="20" y="198" width="110" height="10" rx="5" fill="#2e66c9"/>
+  <text x="20" y="190" fill="#2e66c9" font-weight="bold">fiber</text>
+  <text x="20" y="232" fill="#555" font-size="12">light from the film</text>
+  <rect x="146" y="180" width="8" height="18" fill="#333"/>
+  <rect x="146" y="208" width="8" height="18" fill="#333"/>
+  <text x="120" y="250" fill="#333" font-size="12">① slit</text>
+
+  <!-- beam to collimating mirror (white light) -->
+  <polygon points="154,203 330,110 330,150" fill="#d9d9d9" opacity="0.9"/>
+  <!-- collimating mirror -->
+  <path d="M320,95 Q345,130 320,165" fill="none" stroke="#333" stroke-width="5"/>
+  <text x="250" y="88" fill="#333" font-size="12">② mirror: makes the beam parallel</text>
+
+  <!-- parallel white beam to grating -->
+  <polygon points="330,115 330,150 520,235 520,200" fill="#d9d9d9" opacity="0.9"/>
+  <!-- grating -->
+  <rect x="515" y="185" width="14" height="70" fill="#666" transform="rotate(-18 522 220)"/>
+  <g stroke="#999" stroke-width="1" transform="rotate(-18 522 220)">
+    <line x1="515" y1="190" x2="529" y2="190"/><line x1="515" y1="196" x2="529" y2="196"/>
+    <line x1="515" y1="202" x2="529" y2="202"/><line x1="515" y1="208" x2="529" y2="208"/>
+    <line x1="515" y1="214" x2="529" y2="214"/><line x1="515" y1="220" x2="529" y2="220"/>
+    <line x1="515" y1="226" x2="529" y2="226"/><line x1="515" y1="232" x2="529" y2="232"/>
+    <line x1="515" y1="238" x2="529" y2="238"/><line x1="515" y1="244" x2="529" y2="244"/>
+  </g>
+  <text x="540" y="270" fill="#333" font-size="12">③ diffraction grating:</text>
+  <text x="540" y="286" fill="#333" font-size="12">each wavelength leaves at its own angle</text>
+
+  <!-- fanned rainbow to focusing mirror -->
+  <polygon points="522,205 690,90 715,160 522,225" fill="url(#spectrum)" opacity="0.85"/>
+  <!-- focusing mirror -->
+  <path d="M690,80 Q720,125 715,170" fill="none" stroke="#333" stroke-width="5"/>
+  <text x="600" y="72" fill="#333" font-size="12">④ mirror: focuses each colour</text>
+
+  <!-- rainbow down to detector -->
+  <polygon points="700,95 712,160 640,340 300,340" fill="url(#spectrum)" opacity="0.55"/>
+
+  <!-- detector strip -->
+  <rect x="280" y="340" width="380" height="24" fill="url(#spectrum)" stroke="#222" stroke-width="2"/>
+  <rect x="280" y="340" width="10" height="24" fill="#111"/>
+  <rect x="650" y="340" width="10" height="24" fill="#111"/>
+  <g stroke="#ffffff" stroke-opacity="0.35" stroke-width="1">
+    <line x1="300" y1="340" x2="300" y2="364"/><line x1="320" y1="340" x2="320" y2="364"/>
+    <line x1="340" y1="340" x2="340" y2="364"/><line x1="360" y1="340" x2="360" y2="364"/>
+    <line x1="380" y1="340" x2="380" y2="364"/><line x1="400" y1="340" x2="400" y2="364"/>
+    <line x1="420" y1="340" x2="420" y2="364"/><line x1="440" y1="340" x2="440" y2="364"/>
+    <line x1="460" y1="340" x2="460" y2="364"/><line x1="480" y1="340" x2="480" y2="364"/>
+    <line x1="500" y1="340" x2="500" y2="364"/><line x1="520" y1="340" x2="520" y2="364"/>
+    <line x1="540" y1="340" x2="540" y2="364"/><line x1="560" y1="340" x2="560" y2="364"/>
+    <line x1="580" y1="340" x2="580" y2="364"/><line x1="600" y1="340" x2="600" y2="364"/>
+    <line x1="620" y1="340" x2="620" y2="364"/><line x1="640" y1="340" x2="640" y2="364"/>
+  </g>
+  <text x="300" y="332" fill="#222" font-weight="bold" font-size="13">⑤ detector: a row of 1044 identical pixels</text>
+
+  <!-- detector labels -->
+  <text x="260" y="390" fill="#222" font-size="12">pixel 0</text>
+  <text x="250" y="405" fill="#6a00a8" font-size="12">≈ 347 nm</text>
+  <text x="625" y="390" fill="#222" font-size="12">pixel 1043</text>
+  <text x="625" y="405" fill="#3a1a1a" font-size="12">≈ 927 nm</text>
+  <text x="430" y="390" fill="#555" font-size="12">≈ 0.56 nm per pixel</text>
+  <line x1="285" y1="370" x2="285" y2="430" stroke="#111" stroke-dasharray="3 3"/>
+  <line x1="655" y1="370" x2="655" y2="430" stroke="#111" stroke-dasharray="3 3"/>
+  <text x="200" y="448" fill="#111" font-size="12">pixels 0–3 and 1040–1043 are covered (never see light):</text>
+  <text x="200" y="464" fill="#111" font-size="12">their reading is the electrical baseline subtracted from every other pixel</text>
+
+  <!-- readout -->
+  <path d="M665,352 L760,352" stroke="#444" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="765" y="330" width="180" height="70" rx="8" fill="#ffffff" stroke="#9aa0a8"/>
+  <text x="775" y="352" fill="#222" font-size="12">⑥ after each exposure:</text>
+  <text x="775" y="370" fill="#222" font-size="12">charge per pixel → counts</text>
+  <text x="775" y="388" fill="#222" font-size="12">(max 200,000 = saturated)</text>
+
+  <text x="20" y="500" fill="#555" font-size="12">Simplified crossed Czerny-Turner layout. Every pixel is the same silicon; its position under the rainbow decides which wavelength it measures.</text>
+</svg>
