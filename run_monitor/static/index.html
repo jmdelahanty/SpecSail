@@ -1,0 +1,854 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SpecSail run monitor</title>
+<style>
+  :root {
+    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-serif: Georgia, "Times New Roman", serif;
+    --cds-font-size-caption: 0.8125rem; --cds-font-size-heading: 1.0625rem; --cds-font-size-title: 1.5rem;
+    --cds-font-weight-medium: 600;
+    --cds-gap-xs: 4px; --cds-gap-sm: 8px; --cds-gap-md: 12px; --cds-gap-lg: 20px;
+    --cds-pad-xs: 4px; --cds-pad-sm: 8px; --cds-pad-md: 12px; --cds-pad-lg: 16px;
+    --cds-radius: 8px; --cds-dur-slow: 300ms;
+    --color-bg: #f7f7f5; --color-panel: #ffffff; --color-fg: #1f2328; --color-fg-muted: #5f6670;
+    --color-border-line: #dfe1e4; --color-ok: #2e9a58; --color-warn: #b7791f; --color-bad: #c43d3d;
+    --cds-chart-axis: #b8bcc2; --cds-chart-grid: #eceef0; --cds-chart-reference: #8b9099;
+    --cds-surface-popover: #ffffff; --cds-border: #dfe1e4; --cds-text-secondary: #5f6670;
+    --cds-shadow-popover: 0 4px 16px rgba(0, 0, 0, 0.12);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --color-bg: #16181b; --color-panel: #1f2226; --color-fg: #e8e9eb; --color-fg-muted: #9aa0a8;
+      --color-border-line: #33373d; --color-ok: #4cc27a; --color-warn: #e0a640; --color-bad: #ef6b6b;
+      --cds-chart-axis: #555b63; --cds-chart-grid: #2a2e33; --cds-chart-reference: #8b9099;
+      --cds-surface-popover: #26292e; --cds-border: #3a3f45; --cds-text-secondary: #9aa0a8;
+      --cds-shadow-popover: 0 4px 16px rgba(0, 0, 0, 0.5);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --color-bg: #16181b; --color-panel: #1f2226; --color-fg: #e8e9eb; --color-fg-muted: #9aa0a8;
+    --color-border-line: #33373d; --color-ok: #4cc27a; --color-warn: #e0a640; --color-bad: #ef6b6b;
+    --cds-chart-axis: #555b63; --cds-chart-grid: #2a2e33; --cds-chart-reference: #8b9099;
+    --cds-surface-popover: #26292e; --cds-border: #3a3f45; --cds-text-secondary: #9aa0a8;
+    --cds-shadow-popover: 0 4px 16px rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--color-bg); color: var(--color-fg); font-family: var(--font-sans); }
+  body { padding: 24px 16px 48px; overflow-x: hidden; }
+  .sr { max-width: 1200px; margin: 0 auto; }
+  .dash-skeleton { color: var(--color-fg-muted); }
+  .sr-error { color: var(--color-bad); font-size: var(--cds-font-size-caption); margin: 0; }
+
+  .sr { --ch-red: #d4483f; --ch-green: #2e9a58; --ch-blue: #3d6fd6; --ch-gray: #8b9099; --ch-white: #b98a2e;
+    display: flex; flex-direction: column; gap: var(--cds-gap-lg); font-family: var(--font-sans); }
+  .sr-head { display: flex; flex-direction: column; gap: var(--cds-gap-xs); }
+  .sr-title { font-family: var(--font-serif); font-weight: 400; font-size: var(--cds-font-size-title); margin: 0; text-wrap: balance; overflow-wrap: anywhere; }
+  .sr-take { color: var(--color-fg-muted); margin: 0; max-width: 70ch; }
+  .sr-state { display: inline-flex; align-items: center; gap: var(--cds-gap-xs); font-size: var(--cds-font-size-caption);
+    padding: 2px var(--cds-pad-sm); border-radius: 999px; border: 1px solid var(--color-border-line); width: fit-content; }
+  .sr-state::before { content: ""; width: .5rem; height: .5rem; border-radius: 50%; background: var(--color-fg-muted); }
+  .sr-state[data-state="running"]::before { background: var(--color-ok); }
+  .sr-state[data-state="stopped"]::before { background: var(--color-bad); }
+  .sr-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); gap: var(--cds-gap-md); }
+  .sr-tile { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius);
+    padding: var(--cds-pad-md) var(--cds-pad-lg); display: flex; flex-direction: column; gap: var(--cds-gap-xs); min-width: 0; }
+  .sr-label { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); letter-spacing: .02em; }
+  .sr-big { font-family: var(--font-serif); font-weight: 400; font-size: var(--cds-font-size-title);
+    font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .sr-sub { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); font-variant-numeric: tabular-nums; }
+  .sr-bar { height: 6px; border-radius: 3px; background: var(--cds-chart-grid); overflow: hidden; }
+  .sr-bar > span { display: block; height: 100%; background: var(--color-ok); width: 0; }
+  .sr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr)); gap: var(--cds-gap-md); }
+  .sr-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius);
+    padding: var(--cds-pad-lg); display: flex; flex-direction: column; gap: var(--cds-gap-sm); min-width: 0; }
+  .sr-card h2 { margin: 0; font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); }
+  .sr-note { margin: 0; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+  .sr-chart { position: relative; min-height: 260px; }
+  .sr-chart svg { display: block; }
+  .sr-tip { position: absolute; pointer-events: none; background: var(--cds-surface-popover); border: 1px solid var(--cds-border);
+    border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover); padding: var(--cds-pad-xs) var(--cds-pad-sm);
+    font-size: var(--cds-font-size-caption); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .sr-tip .k { color: var(--cds-text-secondary); }
+  .sr-seg { display: flex; flex-wrap: wrap; gap: var(--cds-gap-xs); }
+  .sr-seg button { font: inherit; font-size: var(--cds-font-size-caption); padding: 2px var(--cds-pad-sm); border-radius: 999px;
+    border: 1px solid var(--color-border-line); background: transparent; color: var(--color-fg); cursor: pointer; }
+  .sr-seg button[aria-pressed="true"] { background: var(--color-fg); color: var(--color-bg); }
+  .sr-seg button:focus-visible { outline: 2px solid var(--color-fg); outline-offset: 2px; }
+  .sr-legend { display: flex; flex-wrap: wrap; gap: var(--cds-gap-sm); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+  .sr-legend i { display: inline-block; width: .6rem; height: .6rem; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
+  .sr-tablebox { max-height: 26rem; overflow: auto; }
+  .sr-table { width: 100%; border-collapse: collapse; font-size: var(--cds-font-size-caption); font-variant-numeric: tabular-nums; }
+  .sr-table th { position: sticky; top: 0; background: var(--color-panel); text-align: left; font-weight: var(--cds-font-weight-medium);
+    color: var(--color-fg-muted); padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); }
+  .sr-table td { padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); white-space: nowrap; }
+  .sr-table td.num, .sr-table th.num { text-align: right; }
+  .sr-flag { color: var(--color-warn); }
+  .sr-flag.bad { color: var(--color-bad); }
+  .sr-ok { color: var(--color-fg-muted); }
+  [data-dash-source-state=empty] { color: transparent; }
+  [data-dash-source-state=refreshing] { opacity: .5; transition: opacity var(--cds-dur-slow); }
+  .sr-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cds-gap-sm); }
+  .sr-select { font: inherit; font-size: var(--cds-font-size-caption); max-width: 100%; padding: 2px var(--cds-pad-xs);
+    border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); background: var(--color-panel); color: var(--color-fg); }
+  .sr-check { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); display: inline-flex; align-items: center; gap: 4px; }
+  #meas-table tbody tr { cursor: pointer; }
+  #meas-table tbody tr:hover td { background: var(--cds-chart-grid); }
+  #meas-table tbody tr[aria-selected="true"] td { background: var(--cds-chart-grid); font-weight: var(--cds-font-weight-medium); }
+  .sr-compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); gap: var(--cds-gap-md); }
+  .sr-metrics { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: var(--cds-gap-sm); }
+  .sr-metric { border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-sm) var(--cds-pad-md); display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .sr-metric .v { font-family: var(--font-serif); font-size: var(--cds-font-size-heading); font-variant-numeric: tabular-nums; }
+  .sr-metric .s { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); font-variant-numeric: tabular-nums; }
+  @media (max-width: 40rem) { .sr-hide-narrow { display: none; } }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+  // Minimal stand-in for the dashboard runtime the page was first written for:
+  // fetches /data/<name>.json, derives calcs, and calls onData listeners.
+  window.dash = (() => {
+    const SOURCES = ['run_log', 'spectra', 'library'];
+    const POLL_MS = 15000;
+    const store = {};            // name -> {status, data, error}
+    const calcs = [];            // [{name, inputs, fn}]
+    const listeners = [];        // [{cb, first}]
+    SOURCES.forEach((n) => { store[n] = { status: 'loading', data: [] }; });
+
+    const readParams = () => {
+      try { return JSON.parse(decodeURIComponent(location.hash.slice(1)) || '{}'); } catch (e) { return {}; }
+    };
+    let params = readParams();
+
+    function derive() {
+      calcs.forEach(({ name, inputs, fn }) => {
+        const ins = inputs.map((i) => store[i]);
+        if (ins.some((s) => !s || s.status === 'error')) { store[name] = { status: 'error', data: [] }; return; }
+        if (ins.some((s) => s.status !== 'ok')) { store[name] = { status: 'loading', data: [] }; return; }
+        try { store[name] = { status: 'ok', data: fn(...ins.map((s) => s.data)) }; }
+        catch (e) { console.error(name, e); store[name] = { status: 'error', data: [], error: String(e) }; }
+      });
+    }
+    function notify() {
+      derive();
+      const ordered = listeners.filter((l) => l.first).concat(listeners.filter((l) => !l.first));
+      ordered.forEach((l) => { try { l.cb(); } catch (e) { console.error(e); } });
+    }
+    async function load(name) {
+      try {
+        const res = await fetch(`data/${name}.json`, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`${res.status}`);
+        store[name] = { status: 'ok', data: await res.json() };
+      } catch (e) {
+        if (store[name].status !== 'ok') store[name] = { status: 'error', data: [], error: String(e) };
+      }
+    }
+    async function poll() {
+      await Promise.all(SOURCES.map(load));
+      notify();
+    }
+    window.addEventListener('DOMContentLoaded', () => { poll(); setInterval(poll, POLL_MS); });
+    window.addEventListener('hashchange', () => { params = readParams(); notify(); });
+    let resizeTimer = null;
+    window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(notify, 150); });
+
+    return {
+      colors: ['#3d6fd6', '#d97a2b', '#2e9a58', '#a34fc2', '#c43d3d', '#1f9aa8', '#8a6d3b', '#6b7280'],
+      calc(name, spec) { calcs.push({ name, inputs: spec.inputs, fn: spec.fn }); store[name] = { status: 'loading', data: [] }; },
+      data(name) { return store[name] || { status: 'error', data: [] }; },
+      onData(cb, opts) { listeners.push({ cb, first: !!(opts && opts.first) }); },
+      params() { return { ...params }; },
+      setParams(update) {
+        params = { ...params, ...update };
+        Object.keys(params).forEach((k) => { if (params[k] == null) delete params[k]; });
+        history.replaceState(null, '', '#' + encodeURIComponent(JSON.stringify(params)));
+        notify();
+      },
+    };
+  })();
+</script>
+</head>
+<body>
+<div class="sr">
+  <header class="sr-head" id="summary">
+    <h1 class="sr-title" id="sr-run-title">Spectral calibration run</h1>
+    <p class="sr-take" id="sr-take">Waiting for the run log.</p>
+    <span class="sr-state" id="sr-state" data-source="run_status" data-field="state">—</span>
+  </header>
+
+  <section class="sr-tiles" id="tiles" aria-label="Run status">
+    <div class="sr-tile">
+      <span class="sr-label">Measurements</span>
+      <span class="sr-big"><span data-source="run_status" data-field="measurements_done" class="dash-skeleton">—</span><span class="sr-sub"> of about <span data-source="run_status" data-field="measurements_expected">—</span></span></span>
+      <div class="sr-bar" aria-hidden="true"><span id="sr-progress"></span></div>
+    </div>
+    <div class="sr-tile">
+      <span class="sr-label">Fiber position</span>
+      <span class="sr-big" data-source="run_status" data-field="position_id">—</span>
+      <span class="sr-sub">Last patch <span data-source="run_status" data-field="last_patch_id">—</span></span>
+    </div>
+    <div class="sr-tile">
+      <span class="sr-label">Latest drift reference vs first at this position</span>
+      <span class="sr-big" id="sr-drift" data-source="run_status" data-field="latest_drift_change">—</span>
+      <span class="sr-sub">White, M counts/s: <span data-source="run_status" data-field="latest_drift_rate">—</span></span>
+    </div>
+    <div class="sr-tile">
+      <span class="sr-label">Last measurement (UTC)</span>
+      <span class="sr-big" data-source="run_status" data-field="last_measurement_time">—</span>
+      <span class="sr-sub">Snapshot taken <span data-source="run_status" data-field="snapshot_time">—</span> UTC</span>
+    </div>
+  </section>
+
+  <section class="sr-grid" aria-label="Charts">
+    <article class="sr-card" id="drift-card">
+      <h2>Drift reference</h2>
+      <p class="sr-note">Full-white signal at each check. A steady line means the fiber, projector and spectrometer held still. Dashed lines mark ±1% around each position's latest reference.</p>
+      <div class="sr-legend" id="drift-legend" data-source="drift"></div>
+      <div class="sr-chart" id="drift-chart" data-source="drift"></div>
+    </article>
+    <article class="sr-card" id="ramp-card">
+      <h2>Response by drive level</h2>
+      <p class="sr-note">Signal per channel against the commanded level, log scale. Flat at the left means levels crushed to black. Ringed points are the protocol grays.</p>
+      <div class="sr-seg" id="ramp-arena" role="group" aria-label="Position"></div>
+      <div class="sr-legend" id="ramp-legend"></div>
+      <div class="sr-chart" id="ramp-chart" data-source="ramps"></div>
+    </article>
+  </section>
+
+  <article class="sr-card" id="spectrum-card">
+    <h2>Spectra</h2>
+    <p class="sr-note">Mean of the scans minus the electrical dark level, per second of integration, every second detector pixel (about 1.1 nm apart). Pick a set or one measurement, or click a row in the table below.</p>
+    <div class="sr-controls">
+      <label class="sr-label" for="spec-select">Show</label>
+      <select id="spec-select" class="sr-select" data-source="spectra"></select>
+      <label class="sr-check"><input type="checkbox" id="spec-norm"> Scale each to its peak</label>
+    </div>
+    <div class="sr-legend" id="spec-legend"></div>
+    <div class="sr-chart" id="spec-chart" data-source="spectra"></div>
+  </article>
+
+  <article class="sr-card" id="compare-card">
+    <h2>Compare shapes</h2>
+    <p class="sr-note">Two spectra from any saved run, with the overall level removed. The ratio line is B divided by A, scaled so that 1.0 means the same shape; a tilt or a bump shows where the shape differs. Shape comparisons assume the same instrument chain.</p>
+    <div class="sr-controls">
+      <label class="sr-label" for="cmp-a">A</label>
+      <select id="cmp-a" class="sr-select" data-source="library"></select>
+      <label class="sr-label" for="cmp-b">B</label>
+      <select id="cmp-b" class="sr-select" data-source="library"></select>
+    </div>
+    <div class="sr-compare" id="cmp-body" data-source="library">
+      <div class="sr-chart" id="cmp-overlay"></div>
+      <div class="sr-chart" id="cmp-ratio"></div>
+      <div class="sr-metrics" id="cmp-metrics"></div>
+    </div>
+  </article>
+
+  <article class="sr-card" id="meas-card">
+    <h2>Measurements</h2>
+    <p class="sr-note">Click a row to see its spectrum above. Newest first. Signal is dark-subtracted counts summed over the detector, per second of integration. Flags: saturated, not stable before scanning, or scans more than 2% apart.</p>
+    <div class="sr-tablebox">
+      <table class="sr-table" id="meas-table" data-source="meas" data-row-key="measurement_id">
+        <thead><tr>
+          <th data-field="seq" class="num">#</th>
+          <th data-field="position_id">Position</th>
+          <th data-field="patch_id">Patch</th>
+          <th data-field="integration_s" class="num sr-hide-narrow">Integration (s)</th>
+          <th data-field="rate_mcps" class="num">Signal (M counts/s)</th>
+          <th data-field="scan_spread" class="num sr-hide-narrow">Scan spread</th>
+          <th data-field="flags">Flags</th>
+          <th data-field="time">Time (UTC)</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </article>
+
+  <article class="sr-card" id="events-card">
+    <h2>Run events</h2>
+    <p class="sr-note">Start, placement confirmations, position changes, errors and the end of the run.</p>
+    <div class="sr-tablebox">
+      <table class="sr-table" id="events-table" data-source="events" data-row-key="key">
+        <thead><tr><th data-field="time">Time (UTC)</th><th data-field="event">Event</th><th data-field="detail">Detail</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </article>
+</div>
+
+<script>
+  const hhmmss = (iso) => iso ? iso.slice(11, 19) : null;
+
+  dash.calc('run_status', {
+    title: 'Run status',
+    description: 'The latest status row of the run log, with the latest drift reference at the current position compared with the first one there.',
+    inputs: ['run_log'],
+    fn: (run_log) => {
+      const s = run_log.filter((r) => r.kind === 'status').slice(-1)[0];
+      if (!s) return [];
+      const drifts = run_log.filter((r) => r.kind === 'measurement' && r.drift_reference && r.position_id === s.position_id);
+      const d = drifts.slice(-1)[0];
+      return [{
+        state: s.state, run_id: s.run_id, waiting_for_operator: !!s.waiting_for_operator,
+        position_id: s.position_id, measurements_done: s.measurements_done,
+        measurements_expected: s.measurements_expected,
+        progress: s.measurements_expected ? s.measurements_done / s.measurements_expected : null,
+        last_patch_id: s.last_patch_id,
+        last_measurement_time: s.last_measurement_utc ? s.last_measurement_utc.slice(11, 19) : null,
+        snapshot_time: s.utc ? s.utc.slice(11, 19) : null,
+        latest_drift_change: d ? d.drift_change_vs_first : null,
+        latest_drift_rate: d ? d.rate_mcps : null,
+      }];
+    },
+  });
+
+  dash.calc('drift', {
+    title: 'Drift references',
+    description: 'Every full-white drift reference, with its position and time.',
+    inputs: ['run_log'],
+    fn: (run_log) => run_log.filter((r) => r.kind === 'measurement' && r.drift_reference)
+      .map((r) => ({ measurement_id: r.measurement_id, position_id: r.position_id, utc: r.utc, rate_mcps: r.rate_mcps, drift_change_vs_first: r.drift_change_vs_first })),
+  });
+
+  dash.calc('ramps', {
+    title: 'Channel ramps',
+    description: 'Patch measurements with a channel and drive level (red, green, blue, gray), for the response chart.',
+    inputs: ['run_log'],
+    fn: (run_log) => run_log.filter((r) => r.kind === 'measurement' && ['red', 'green', 'blue', 'gray'].includes(r.channel) && r.level != null)
+      .map((r) => ({ measurement_id: r.measurement_id, position_id: r.position_id, channel: r.channel, level: r.level, rate_mcps: r.rate_mcps, protocol_gray: r.protocol_gray, patch_id: r.patch_id })),
+  });
+
+  dash.calc('meas', {
+    title: 'Measurements, newest first',
+    description: 'Every measurement in the run log, newest first, with its flags spelled out.',
+    inputs: ['run_log'],
+    fn: (run_log) => run_log.filter((r) => r.kind === 'measurement').reverse().map((r) => ({
+      measurement_id: r.measurement_id, seq: r.seq, position_id: r.position_id, patch_id: r.patch_id,
+      integration_s: r.integration_s, rate_mcps: r.rate_mcps, scan_spread: r.scan_spread,
+      flags: [r.saturated ? 'saturated' : null, r.stable === false ? 'not stable' : null,
+        r.scan_spread != null && r.scan_spread > 0.02 ? 'spread > 2%' : null].filter(Boolean).join(', '),
+      time: r.utc ? r.utc.slice(11, 19) : null,
+    })),
+  });
+
+  dash.calc('events', {
+    title: 'Run events',
+    description: 'Non-measurement entries of the run log, newest first.',
+    inputs: ['run_log'],
+    fn: (run_log) => run_log.filter((r) => r.kind === 'event').reverse()
+      .map((r) => ({ key: r.utc + ' ' + r.event, time: r.utc ? r.utc.slice(11, 19) : null, event: r.event, detail: r.detail })),
+  });
+
+  window.srChannelColor = (ch) => `var(--ch-${ch})`;
+  window.srPositions = [];
+  dash.onData(() => {
+    const log = dash.data('run_log');
+    if (log.status !== 'ok') return;
+    log.data.forEach((r) => { if (r.position_id && !window.srPositions.includes(r.position_id)) window.srPositions.push(r.position_id); });
+  }, { first: true });
+</script>
+
+<script>
+  const pct = d3.format('+.1%');
+  const f3 = d3.format('.3f');
+
+  dash.onData(() => {
+    const st = dash.data('run_status');
+    const row = st.status === 'ok' ? st.data[0] : null;
+    const set = (field, text) => {
+      document.querySelectorAll(`[data-source="run_status"][data-field="${field}"]`).forEach((el) => {
+        el.textContent = text ?? '—';
+        el.classList.toggle('dash-skeleton', st.status === 'loading');
+      });
+    };
+    set('state', row ? (row.waiting_for_operator ? 'waiting for operator' : row.state) : null);
+    if (row && row.run_id) document.getElementById('sr-run-title').textContent = row.run_id;
+    set('measurements_done', row ? String(row.measurements_done) : null);
+    set('measurements_expected', row ? String(row.measurements_expected) : null);
+    set('position_id', row ? row.position_id : null);
+    set('last_patch_id', row ? row.last_patch_id : null);
+    set('latest_drift_change', row && row.latest_drift_change != null ? pct(row.latest_drift_change) : null);
+    set('latest_drift_rate', row && row.latest_drift_rate != null ? f3(row.latest_drift_rate) : null);
+    set('last_measurement_time', row ? row.last_measurement_time : null);
+    set('snapshot_time', row ? row.snapshot_time : null);
+    document.getElementById('sr-state').dataset.state = row ? row.state : '';
+    document.getElementById('sr-progress').style.width = row && row.progress != null ? `${Math.min(100, row.progress * 100)}%` : '0';
+    const driftEl = document.getElementById('sr-drift');
+    const ch = row ? Math.abs(row.latest_drift_change ?? 0) : 0;
+    driftEl.style.color = ch > 0.02 ? 'var(--color-bad)' : ch > 0.01 ? 'var(--color-warn)' : '';
+
+    const take = document.getElementById('sr-take');
+    if (!row) { take.textContent = st.status === 'loading' ? 'Loading the run log.' : 'No run status yet.'; return; }
+    const driftText = row.latest_drift_change == null ? 'no drift reference yet at this position'
+      : `latest drift reference ${pct(row.latest_drift_change)} vs the first at this position`;
+    take.textContent = `Run ${row.state} at ${row.position_id}: ${row.measurements_done} of about ${row.measurements_expected} measurements, ${driftText}. `
+      + (row.waiting_for_operator ? 'Waiting for the operator to confirm the next placement. ' : '')
+      + `The page re-reads the run bundle every 15 s.`;
+  });
+</script>
+
+<script>
+  const driftTip = document.createElement('div');
+  driftTip.className = 'sr-tip'; driftTip.hidden = true;
+  document.getElementById('drift-chart').appendChild(driftTip);
+
+  dash.onData(() => {
+    const box = document.getElementById('drift-chart');
+    const legend = document.getElementById('drift-legend');
+    const res = dash.data('drift');
+    box.querySelector('svg')?.remove();
+    legend.replaceChildren();
+    if (res.status !== 'ok' || !res.data.length) return;
+    const rows = res.data.map((r) => ({ ...r, t: new Date(r.utc) }));
+    const positions = window.srPositions.filter((p) => rows.some((r) => r.position_id === p));
+    const color = (p) => dash.colors[window.srPositions.indexOf(p) % dash.colors.length];
+    positions.forEach((p) => {
+      const s = document.createElement('span');
+      const i = document.createElement('i'); i.style.background = color(p);
+      s.append(i, p.replace('_center', ''));
+      legend.appendChild(s);
+    });
+
+    const W = box.clientWidth || 400, H = 260;
+    const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+    const ext = d3.extent(rows, (r) => r.rate_mcps);
+    const pad = Math.max((ext[1] - ext[0]) * 0.25, ext[1] * 0.02);
+    const y = d3.scaleLinear([ext[0] - pad, ext[1] + pad], [H - 28, 10]).nice();
+    const yAxis = svg.append('g').attr('font-size', null).attr('font-family', null).call(d3.axisLeft(y).ticks(5).tickFormat(d3.format('.2f')));
+    let left = 0; yAxis.selectAll('text').each(function () { left = Math.max(left, this.getComputedTextLength()); });
+    left += 14;
+    yAxis.attr('transform', `translate(${left},0)`);
+    const tExt = d3.extent(rows, (r) => r.t);
+    if (+tExt[0] === +tExt[1]) { tExt[0] = new Date(+tExt[0] - 5 * 60e3); tExt[1] = new Date(+tExt[1] + 5 * 60e3); }
+    const x = d3.scaleUtc(tExt, [left + 8, W - 12]);
+    svg.append('g').attr('transform', `translate(0,${H - 28})`).attr('font-size', null).attr('font-family', null)
+      .call(d3.axisBottom(x).ticks(Math.max(2, Math.floor(W / 110))).tickFormat(d3.utcFormat('%H:%M')));
+    svg.selectAll('.domain').attr('stroke', 'var(--cds-chart-axis)');
+    svg.selectAll('.tick line').attr('stroke', 'var(--cds-chart-axis)');
+    svg.selectAll('.tick text').attr('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)');
+    svg.insert('g', ':first-child').selectAll('line').data(y.ticks(5)).join('line')
+      .attr('x1', left).attr('x2', W - 12).attr('y1', (d) => y(d)).attr('y2', (d) => y(d)).attr('stroke', 'var(--cds-chart-grid)');
+
+    positions.forEach((p) => {
+      const pr = rows.filter((r) => r.position_id === p);
+      const last = pr[pr.length - 1];
+      [1.01, 0.99].forEach((k) => svg.append('line').attr('x1', x(pr[0].t)).attr('x2', W - 12)
+        .attr('y1', y(last.rate_mcps * k)).attr('y2', y(last.rate_mcps * k))
+        .attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 4'));
+      svg.append('path').datum(pr).attr('fill', 'none').attr('stroke', color(p)).attr('stroke-width', 2)
+        .attr('stroke-linecap', 'round').attr('stroke-linejoin', 'round')
+        .attr('d', d3.line().x((r) => x(r.t)).y((r) => y(r.rate_mcps)));
+      svg.append('g').selectAll('circle').data(pr).join('circle')
+        .attr('cx', (r) => x(r.t)).attr('cy', (r) => y(r.rate_mcps)).attr('r', 4).attr('fill', color(p))
+        .on('pointerenter', (event, r) => {
+          driftTip.hidden = false;
+          driftTip.innerHTML = '';
+          const a = document.createElement('div'); a.className = 'k'; a.textContent = `${r.utc.slice(11, 19)} UTC · ${r.position_id}`;
+          const b = document.createElement('div'); b.textContent = `${d3.format('.3f')(r.rate_mcps)} M counts/s, ${d3.format('+.1%')(r.drift_change_vs_first ?? 0)} vs first`;
+          driftTip.append(a, b);
+          const px = Math.min(x(r.t) + 10, W - driftTip.offsetWidth - 4);
+          driftTip.style.left = `${Math.max(0, px)}px`; driftTip.style.top = `${Math.max(0, y(r.rate_mcps) - 44)}px`;
+        })
+        .on('pointerleave', () => { driftTip.hidden = true; });
+    });
+    svg.append('text').attr('x', left).attr('y', 8).attr('fill', 'var(--color-fg-muted)')
+      .style('font-size', 'var(--cds-font-size-caption)').text('M counts/s');
+  });
+</script>
+
+<script>
+  const rampTip = document.createElement('div');
+  rampTip.className = 'sr-tip'; rampTip.hidden = true;
+  document.getElementById('ramp-chart').appendChild(rampTip);
+  const seg = document.getElementById('ramp-arena');
+  seg.addEventListener('click', (event) => {
+    const b = event.target.closest('button[data-pos]');
+    if (b) dash.setParams({ ramp_position: b.dataset.pos === 'current' ? null : b.dataset.pos });
+  });
+
+  dash.onData(() => {
+    const box = document.getElementById('ramp-chart');
+    const legend = document.getElementById('ramp-legend');
+    const res = dash.data('ramps');
+    const st = dash.data('run_status');
+    const current = st.status === 'ok' && st.data[0] ? st.data[0].position_id : null;
+    const picked = dash.params().ramp_position ?? null;
+    const pos = picked || current;
+    box.querySelector('svg')?.remove();
+    legend.replaceChildren();
+    seg.replaceChildren(...['current', ...window.srPositions].map((p) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.dataset.pos = p;
+      b.textContent = p === 'current' ? 'Current' : p.replace('_center', '');
+      b.setAttribute('aria-pressed', String(p === 'current' ? !picked : picked === p));
+      return b;
+    }));
+    if (res.status !== 'ok') return;
+    const rows = res.data.filter((r) => r.position_id === pos && r.rate_mcps > 0);
+    if (!rows.length) return;
+    const channels = ['red', 'green', 'blue', 'gray'].filter((c) => rows.some((r) => r.channel === c));
+    channels.forEach((c) => {
+      const s = document.createElement('span');
+      const i = document.createElement('i'); i.style.background = window.srChannelColor(c);
+      s.append(i, c);
+      legend.appendChild(s);
+    });
+
+    const W = box.clientWidth || 400, H = 260;
+    const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+    const ext = d3.extent(rows, (r) => r.rate_mcps);
+    const y = d3.scaleLog([ext[0] / 1.3, ext[1] * 1.3], [H - 28, 12]);
+    const yAxis = svg.append('g').attr('font-size', null).attr('font-family', null)
+      .call(d3.axisLeft(y).ticks(4, '~g'));
+    let left = 0; yAxis.selectAll('text').each(function () { left = Math.max(left, this.getComputedTextLength()); });
+    left += 14;
+    yAxis.attr('transform', `translate(${left},0)`);
+    const x = d3.scaleLinear([0, 255], [left + 8, W - 12]);
+    svg.append('g').attr('transform', `translate(0,${H - 28})`).attr('font-size', null).attr('font-family', null)
+      .call(d3.axisBottom(x).tickValues([0, 32, 64, 96, 128, 160, 192, 224, 255]));
+    svg.selectAll('.domain').attr('stroke', 'var(--cds-chart-axis)');
+    svg.selectAll('.tick line').attr('stroke', 'var(--cds-chart-axis)');
+    svg.selectAll('.tick text').attr('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)');
+    svg.append('text').attr('x', left).attr('y', 9).attr('fill', 'var(--color-fg-muted)')
+      .style('font-size', 'var(--cds-font-size-caption)').text('M counts/s');
+
+    channels.forEach((c) => {
+      const cr = rows.filter((r) => r.channel === c).sort((a, b) => a.level - b.level);
+      svg.append('path').datum(cr).attr('fill', 'none').attr('stroke', window.srChannelColor(c)).attr('stroke-width', 2)
+        .attr('stroke-linecap', 'round').attr('stroke-linejoin', 'round')
+        .attr('d', d3.line().x((r) => x(r.level)).y((r) => y(r.rate_mcps)));
+      svg.append('g').selectAll('circle').data(cr).join('circle')
+        .attr('cx', (r) => x(r.level)).attr('cy', (r) => y(r.rate_mcps))
+        .attr('r', (r) => r.protocol_gray ? 5.5 : 3.5)
+        .attr('fill', (r) => r.protocol_gray ? 'var(--color-panel)' : window.srChannelColor(c))
+        .attr('stroke', window.srChannelColor(c)).attr('stroke-width', (r) => r.protocol_gray ? 2 : 0)
+        .on('pointerenter', (event, r) => {
+          rampTip.hidden = false; rampTip.innerHTML = '';
+          const a = document.createElement('div'); a.className = 'k'; a.textContent = `${r.patch_id} · ${r.position_id}`;
+          const b = document.createElement('div'); b.textContent = `level ${r.level}: ${d3.format('.4f')(r.rate_mcps)} M counts/s`;
+          rampTip.append(a, b);
+          const px = Math.min(x(r.level) + 10, W - rampTip.offsetWidth - 4);
+          rampTip.style.left = `${Math.max(0, px)}px`; rampTip.style.top = `${Math.max(0, y(r.rate_mcps) - 44)}px`;
+        })
+        .on('pointerleave', () => { rampTip.hidden = true; });
+    });
+  });
+</script>
+
+<script>
+  dash.onData(() => {
+    const fill = (tableId, source, cols, fmt) => {
+      const body = document.querySelector(`#${tableId} tbody`);
+      const res = dash.data(source);
+      if (res.status !== 'ok') { body.replaceChildren(); return; }
+      body.replaceChildren(...res.data.map((r) => {
+        const tr = document.createElement('tr');
+        tr.dataset.key = r[cols.key];
+        cols.fields.forEach((f) => {
+          const td = document.createElement('td');
+          if (cols.num.includes(f)) td.className = 'num';
+          if (cols.hide.includes(f)) td.classList.add('sr-hide-narrow');
+          td.textContent = fmt(f, r[f], r);
+          if (f === 'flags' && r.flags) td.className = r.flags.includes('saturated') ? 'sr-flag bad' : 'sr-flag';
+          tr.appendChild(td);
+        });
+        return tr;
+      }));
+    };
+    fill('meas-table', 'meas', {
+      key: 'measurement_id',
+      fields: ['seq', 'position_id', 'patch_id', 'integration_s', 'rate_mcps', 'scan_spread', 'flags', 'time'],
+      num: ['seq', 'integration_s', 'rate_mcps', 'scan_spread'], hide: ['integration_s', 'scan_spread'],
+    }, (f, v) => {
+      if (v == null || v === '') return f === 'flags' ? '' : '—';
+      if (f === 'position_id') return v.replace('_center', '');
+      if (f === 'integration_s') return d3.format('.2f')(v);
+      if (f === 'rate_mcps') return d3.format('.4f')(v);
+      if (f === 'scan_spread') return d3.format('.1%')(v);
+      return String(v);
+    });
+    fill('events-table', 'events', { key: 'key', fields: ['time', 'event', 'detail'], num: [], hide: [] },
+      (f, v) => (v == null ? '—' : String(v)));
+    const chosen = dash.params().spectrum;
+    document.querySelectorAll('#meas-table tbody tr').forEach((tr) => tr.setAttribute('aria-selected', String(tr.dataset.key === chosen)));
+  });
+</script>
+
+<script>
+  const specTip = document.createElement('div');
+  specTip.className = 'sr-tip'; specTip.hidden = true;
+  document.getElementById('spec-chart').appendChild(specTip);
+  const specSel = document.getElementById('spec-select');
+  const specNorm = document.getElementById('spec-norm');
+  specSel.addEventListener('change', () => dash.setParams({ spectrum: specSel.value }));
+  specNorm.addEventListener('change', () => dash.setParams({ spectrum_norm: specNorm.checked }));
+  document.getElementById('meas-table').addEventListener('click', (event) => {
+    const tr = event.target.closest('tr[data-key]');
+    if (!tr) return;
+    dash.setParams({ spectrum: tr.dataset.key });
+    document.getElementById('spectrum-card').scrollIntoView({ block: 'nearest' });
+  });
+
+  const channelOf = (patch) => {
+    if (!patch) return null;
+    if (patch.startsWith('drift_reference') || patch.startsWith('white')) return 'white';
+    const c = patch.split('_')[0];
+    return ['red', 'green', 'blue', 'gray'].includes(c) ? c : null;
+  };
+
+  dash.onData(() => {
+    const box = document.getElementById('spec-chart');
+    const legend = document.getElementById('spec-legend');
+    const res = dash.data('spectra');
+    box.querySelector('svg')?.remove();
+    legend.replaceChildren();
+    if (res.status !== 'ok') { specSel.replaceChildren(); return; }
+    // Nested arrays in an attached JSON file arrive as JSON text: parse them back into numbers.
+    const nums = (v) => (typeof v === 'string' ? JSON.parse(v) : (v || [])).map(Number);
+    const wl = nums((res.data.find((r) => r.kind === 'wavelengths') || {}).values);
+    const spectra = res.data.filter((r) => r.kind === 'spectrum')
+      .map((r) => ({ ...r, values: nums(r.values), drift_reference: r.drift_reference === true || r.drift_reference === 'true' }));
+    const st = dash.data('run_status');
+    const current = st.status === 'ok' && st.data[0] ? st.data[0].position_id : null;
+    const choice = dash.params().spectrum || 'primaries';
+    const norm = !!dash.params().spectrum_norm;
+    specNorm.checked = norm;
+
+    const presets = [['primaries', 'Red, green, blue and white at 255 (current position)'],
+      ['drift', 'Drift references (current position)'], ['gray', 'Gray ramp (current position)']];
+    if (document.activeElement !== specSel) {
+      specSel.replaceChildren(...presets.map(([v, t]) => new Option(t, v)),
+        ...[...spectra].reverse().map((s) => new Option(`${s.position_id.replace('_center', '')} · ${s.patch_id}`, s.measurement_id)));
+      specSel.value = choice;
+    }
+
+    let shown;
+    const here = spectra.filter((s) => s.position_id === current);
+    if (choice === 'primaries') shown = here.filter((s) => ['red_255', 'green_255', 'blue_255', 'white_255'].includes(s.patch_id));
+    else if (choice === 'drift') shown = here.filter((s) => s.drift_reference);
+    else if (choice === 'gray') shown = here.filter((s) => s.patch_id.startsWith('gray_'));
+    else shown = spectra.filter((s) => s.measurement_id === choice);
+    if (!shown.length || !wl.length) return;
+
+    const colorFor = (s, i) => {
+      if (choice === 'drift' || choice === 'gray') return dash.colors[i % dash.colors.length];
+      const c = channelOf(s.patch_id);
+      return c ? window.srChannelColor(c) : dash.colors[0];
+    };
+    const series = shown.map((s, i) => {
+      const peak = d3.max(s.values) || 1;
+      return { s, color: colorFor(s, i), vals: norm ? s.values.map((v) => v / peak) : s.values };
+    });
+    series.forEach(({ s, color }) => {
+      const span = document.createElement('span');
+      const i = document.createElement('i'); i.style.background = color;
+      span.append(i, `${s.patch_id.replace('drift_reference_', 'drift ')}${choice === 'drift' ? '' : ''}`);
+      legend.appendChild(span);
+    });
+
+    const W = box.clientWidth || 400, H = 280;
+    const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+    const ymax = d3.max(series, (d) => d3.max(d.vals)) || 1;
+    const ymin = Math.min(0, d3.min(series, (d) => d3.min(d.vals)) || 0);
+    const y = d3.scaleLinear([ymin, ymax * 1.05], [H - 28, 12]).nice();
+    const yAxis = svg.append('g').attr('font-size', null).attr('font-family', null)
+      .call(d3.axisLeft(y).ticks(5).tickFormat(norm ? d3.format('.1f') : d3.format('~s')));
+    let left = 0; yAxis.selectAll('text').each(function () { left = Math.max(left, this.getComputedTextLength()); });
+    left += 14;
+    yAxis.attr('transform', `translate(${left},0)`);
+    const x = d3.scaleLinear([wl[0], wl[wl.length - 1]], [left + 8, W - 12]);
+    svg.append('g').attr('transform', `translate(0,${H - 28})`).attr('font-size', null).attr('font-family', null)
+      .call(d3.axisBottom(x).ticks(Math.max(3, Math.floor(W / 80))).tickFormat((d) => `${d} nm`));
+    svg.selectAll('.domain').attr('stroke', 'var(--cds-chart-axis)');
+    svg.selectAll('.tick line').attr('stroke', 'var(--cds-chart-axis)');
+    svg.selectAll('.tick text').attr('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)');
+    svg.insert('g', ':first-child').selectAll('line').data(y.ticks(5)).join('line')
+      .attr('x1', left).attr('x2', W - 12).attr('y1', (d) => y(d)).attr('y2', (d) => y(d)).attr('stroke', 'var(--cds-chart-grid)');
+    svg.append('text').attr('x', left).attr('y', 9).attr('fill', 'var(--color-fg-muted)')
+      .style('font-size', 'var(--cds-font-size-caption)').text(norm ? 'fraction of peak' : 'counts/s per pixel');
+    series.forEach(({ vals, color }) => {
+      svg.append('path').datum(vals).attr('fill', 'none').attr('stroke', color).attr('stroke-width', 1.5)
+        .attr('stroke-linejoin', 'round').attr('d', d3.line().x((v, i) => x(wl[i])).y((v) => y(v)));
+    });
+
+    const rule = svg.append('line').attr('y1', 12).attr('y2', H - 28).attr('stroke', 'var(--cds-chart-reference)').attr('visibility', 'hidden');
+    svg.append('rect').attr('x', left).attr('y', 0).attr('width', W - 12 - left).attr('height', H - 28).attr('fill', 'transparent')
+      .on('pointermove', (event) => {
+        const [mx] = d3.pointer(event);
+        const w = x.invert(mx);
+        const i = Math.max(0, Math.min(wl.length - 1, d3.bisectCenter(wl, w)));
+        rule.attr('x1', x(wl[i])).attr('x2', x(wl[i])).attr('visibility', 'visible');
+        specTip.hidden = false; specTip.innerHTML = '';
+        const a = document.createElement('div'); a.className = 'k'; a.textContent = `${d3.format('.1f')(wl[i])} nm`;
+        specTip.appendChild(a);
+        series.forEach(({ s, vals }) => {
+          const b = document.createElement('div');
+          b.textContent = `${s.patch_id}: ${norm ? d3.format('.3f')(vals[i]) : d3.format(',.0f')(vals[i])}`;
+          specTip.appendChild(b);
+        });
+        const px = x(wl[i]) + 10 + specTip.offsetWidth > W ? x(wl[i]) - specTip.offsetWidth - 10 : x(wl[i]) + 10;
+        specTip.style.left = `${Math.max(0, px)}px`; specTip.style.top = '16px';
+      })
+      .on('pointerleave', () => { specTip.hidden = true; rule.attr('visibility', 'hidden'); });
+  });
+</script>
+
+<script>
+  const cmpA = document.getElementById('cmp-a');
+  const cmpB = document.getElementById('cmp-b');
+  cmpA.addEventListener('change', () => dash.setParams({ cmp_a: cmpA.value }));
+  cmpB.addEventListener('change', () => dash.setParams({ cmp_b: cmpB.value }));
+  const cmpTip = document.createElement('div');
+  cmpTip.className = 'sr-tip'; cmpTip.hidden = true;
+  document.getElementById('cmp-overlay').appendChild(cmpTip);
+
+  const numsOf = (v) => (typeof v === 'string' ? JSON.parse(v) : (v || [])).map(Number);
+  const pct1 = d3.format('.1%');
+
+  function axesFor(svg, x, y, W, H, left, yfmt, ylabel) {
+    const yAxis = svg.append('g').attr('font-size', null).attr('font-family', null)
+      .attr('transform', `translate(${left},0)`).call(d3.axisLeft(y).ticks(5).tickFormat(yfmt));
+    svg.append('g').attr('transform', `translate(0,${H - 28})`).attr('font-size', null).attr('font-family', null)
+      .call(d3.axisBottom(x).ticks(Math.max(3, Math.floor(W / 90))).tickFormat((d) => `${d} nm`));
+    svg.selectAll('.domain').attr('stroke', 'var(--cds-chart-axis)');
+    svg.selectAll('.tick line').attr('stroke', 'var(--cds-chart-axis)');
+    svg.selectAll('.tick text').attr('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)');
+    svg.insert('g', ':first-child').selectAll('line').data(y.ticks(5)).join('line')
+      .attr('x1', left).attr('x2', W - 12).attr('y1', (d) => y(d)).attr('y2', (d) => y(d)).attr('stroke', 'var(--cds-chart-grid)');
+    svg.append('text').attr('x', left).attr('y', 9).attr('fill', 'var(--color-fg-muted)')
+      .style('font-size', 'var(--cds-font-size-caption)').text(ylabel);
+    return yAxis;
+  }
+
+  function measureLeft(y, yfmt) {
+    const probe = d3.select(document.body).append('svg').attr('width', 0).attr('height', 0);
+    const g = probe.append('g').attr('font-size', null).attr('font-family', null).call(d3.axisLeft(y).ticks(5).tickFormat(yfmt));
+    let w = 0; g.selectAll('text').each(function () { w = Math.max(w, this.getComputedTextLength()); });
+    probe.remove();
+    return w + 16;
+  }
+
+  dash.onData(() => {
+    const res = dash.data('library');
+    const overlayBox = document.getElementById('cmp-overlay');
+    const ratioBox = document.getElementById('cmp-ratio');
+    const metrics = document.getElementById('cmp-metrics');
+    overlayBox.querySelector('svg')?.remove();
+    ratioBox.querySelector('svg')?.remove();
+    metrics.replaceChildren();
+    if (res.status !== 'ok') { cmpA.replaceChildren(); cmpB.replaceChildren(); return; }
+    const wl = numsOf((res.data.find((r) => r.kind === 'wavelengths') || {}).values);
+    const specs = res.data.filter((r) => r.kind === 'spectrum').map((r) => ({ ...r, values: numsOf(r.values) }));
+    if (!specs.length || !wl.length) return;
+    const label = (s) => `${s.run_label} · ${s.position_id.replace('_center', '').replace(/_/g, ' ')} · ${s.patch_id}`;
+    // Default: white at the first position vs white at another position (or run), else the first two.
+    const whites = specs.filter((s) => s.patch_id === 'white_255');
+    const defA = whites[0] || specs[0];
+    const defB = whites.find((s) => s !== defA && (s.run_id !== defA.run_id || s.position_id !== defA.position_id))
+      || specs.find((s) => s !== defA) || defA;
+    const keyA = dash.params().cmp_a || defA.key;
+    const keyB = dash.params().cmp_b || defB.key;
+    for (const [sel, key] of [[cmpA, keyA], [cmpB, keyB]]) {
+      if (document.activeElement !== sel) {
+        sel.replaceChildren(...specs.map((s) => new Option(label(s), s.key)));
+        sel.value = key;
+      }
+    }
+    const A = specs.find((s) => s.key === keyA) || defA;
+    const B = specs.find((s) => s.key === keyB) || defB;
+    const colA = dash.colors[0], colB = dash.colors[1];
+
+    // overlay, each scaled by its own 420-700 nm area
+    const inRange = (w) => w >= 400 && w <= 700;
+    const norm = (s) => s.values.map((v) => v / (s.area_420_700 || 1) * 1000);
+    const nA = norm(A), nB = norm(B);
+    {
+      const W = overlayBox.clientWidth || 400, H = 240;
+      const idx = wl.map((w, i) => i).filter((i) => inRange(wl[i]));
+      const ymax = d3.max(idx, (i) => Math.max(nA[i], nB[i])) || 1;
+      const y = d3.scaleLinear([0, ymax * 1.08], [H - 28, 14]).nice();
+      const yfmt = d3.format('.1f');
+      const left = measureLeft(y, yfmt);
+      const x = d3.scaleLinear([400, 700], [left + 6, W - 12]);
+      const svg = d3.select(overlayBox).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+      axesFor(svg, x, y, W, H, left, yfmt, 'share of area (‰ per pixel)');
+      [[nA, colA], [nB, colB]].forEach(([n, col]) => {
+        svg.append('path').datum(idx).attr('fill', 'none').attr('stroke', col).attr('stroke-width', 1.6)
+          .attr('stroke-linejoin', 'round').attr('d', d3.line().x((i) => x(wl[i])).y((i) => y(n[i])));
+      });
+      const legend = svg.append('g').attr('transform', `translate(${W - 12},16)`);
+      [['A', colA], ['B', colB]].forEach(([t, col], k) => {
+        const g = legend.append('g').attr('transform', `translate(0,${k * 16})`);
+        g.append('rect').attr('x', -34).attr('y', -8).attr('width', 12).attr('height', 3).attr('fill', col);
+        g.append('text').attr('x', -18).attr('y', -4).attr('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text(t);
+      });
+      const rule = svg.append('line').attr('y1', 14).attr('y2', H - 28).attr('stroke', 'var(--cds-chart-reference)').attr('visibility', 'hidden');
+      svg.append('rect').attr('x', left).attr('y', 0).attr('width', W - 12 - left).attr('height', H - 28).attr('fill', 'transparent')
+        .on('pointermove', (event) => {
+          const [mx] = d3.pointer(event);
+          const i = d3.bisectCenter(wl, x.invert(mx));
+          rule.attr('x1', x(wl[i])).attr('x2', x(wl[i])).attr('visibility', 'visible');
+          cmpTip.hidden = false; cmpTip.innerHTML = '';
+          const a = document.createElement('div'); a.className = 'k'; a.textContent = `${d3.format('.1f')(wl[i])} nm`;
+          const b = document.createElement('div'); b.textContent = `A ${yfmt(nA[i])} · B ${yfmt(nB[i])}`;
+          cmpTip.append(a, b);
+          const px = x(wl[i]) + 10 + cmpTip.offsetWidth > W ? x(wl[i]) - cmpTip.offsetWidth - 10 : x(wl[i]) + 10;
+          cmpTip.style.left = `${Math.max(0, px)}px`; cmpTip.style.top = '16px';
+        })
+        .on('pointerleave', () => { cmpTip.hidden = true; rule.attr('visibility', 'hidden'); });
+    }
+
+    // ratio B/A in 10 nm bins over 430-670 nm, scaled so the area ratio is 1.0
+    const scale = (A.area_420_700 && B.area_420_700) ? B.area_420_700 / A.area_420_700 : 1;
+    const bins = d3.range(430, 670, 10).map((lo) => {
+      let sa = 0, sb = 0;
+      wl.forEach((w, i) => { if (w >= lo && w < lo + 10) { sa += A.values[i]; sb += B.values[i]; } });
+      return { mid: lo + 5, r: sa > 0 ? sb / sa / scale : null, weak: sa < 0.02 * (A.area_420_700 || 1) / 24 };
+    }).filter((b) => b.r !== null && Number.isFinite(b.r));
+    {
+      const W = ratioBox.clientWidth || 400, H = 240;
+      const ext = d3.extent(bins, (b) => b.r);
+      const y = d3.scaleLinear([Math.min(0.9, ext[0] - 0.02), Math.max(1.1, ext[1] + 0.02)], [H - 28, 14]).nice();
+      const yfmt = d3.format('.2f');
+      const left = measureLeft(y, yfmt);
+      const x = d3.scaleLinear([430, 670], [left + 6, W - 12]);
+      const svg = d3.select(ratioBox).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+      axesFor(svg, x, y, W, H, left, yfmt, 'B ÷ A, shape only (1.0 = same)');
+      svg.append('rect').attr('x', x(430)).attr('width', x(670) - x(430)).attr('y', y(1.05)).attr('height', y(0.95) - y(1.05))
+        .attr('fill', 'var(--cds-chart-grid)').attr('opacity', 0.6);
+      svg.append('line').attr('x1', x(430)).attr('x2', x(670)).attr('y1', y(1)).attr('y2', y(1))
+        .attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 4');
+      svg.append('path').datum(bins).attr('fill', 'none').attr('stroke', colB).attr('stroke-width', 2)
+        .attr('stroke-linecap', 'round').attr('stroke-linejoin', 'round').attr('d', d3.line().x((b) => x(b.mid)).y((b) => y(b.r)));
+      svg.append('g').selectAll('circle').data(bins).join('circle').attr('cx', (b) => x(b.mid)).attr('cy', (b) => y(b.r))
+        .attr('r', 3).attr('fill', (b) => b.weak ? 'var(--color-panel)' : colB).attr('stroke', colB).attr('stroke-width', 1.2);
+    }
+
+    // metrics
+    const idx = wl.map((w, i) => i).filter((i) => wl[i] >= 430 && wl[i] <= 670);
+    let dot = 0, na = 0, nb = 0;
+    idx.forEach((i) => { dot += A.values[i] * B.values[i]; na += A.values[i] ** 2; nb += B.values[i] ** 2; });
+    const angle = Math.acos(Math.min(1, dot / Math.sqrt(na * nb))) * 180 / Math.PI;
+    const tiles = [
+      ['Spectral angle', `${d3.format('.2f')(angle)}°`, '0° = identical shape (430–670 nm)'],
+      ['Level, B ÷ A', d3.format('.3f')(scale), 'area 420–700 nm'],
+      ['Blue share', `${pct1(A.share_blue)} → ${pct1(B.share_blue)}`, '430–480 nm of 420–700 nm'],
+      ['Green share', `${pct1(A.share_green)} → ${pct1(B.share_green)}`, '500–580 nm'],
+      ['Red share', `${pct1(A.share_red)} → ${pct1(B.share_red)}`, '600–660 nm'],
+      ['Peaks (blue / red)', `${d3.format('+.2f')(B.peak_blue_nm - A.peak_blue_nm)} / ${d3.format('+.2f')(B.peak_red_nm - A.peak_red_nm)} nm`,
+        `A ${A.peak_blue_nm} / ${A.peak_red_nm} nm`],
+    ];
+    metrics.replaceChildren(...tiles.map(([k, v, s]) => {
+      const d = document.createElement('div'); d.className = 'sr-metric';
+      const a = document.createElement('span'); a.className = 'sr-label'; a.textContent = k;
+      const b = document.createElement('span'); b.className = 'v'; b.textContent = v;
+      const c = document.createElement('span'); c.className = 's'; c.textContent = s;
+      d.append(a, b, c); return d;
+    }));
+  });
+</script>
+</body>
+</html>

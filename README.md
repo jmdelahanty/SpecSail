@@ -115,6 +115,51 @@ log.jsonl
 
 Design: Citrus `docs/projector_spectral_calibration_run_design_2026-10-19.md`.
 
+### Following a run
+
+Two ways to watch a calibration run while it goes, from any terminal on the rig. Neither touches the spectrometer
+or Citrus: they only read the run bundle.
+
+```bash
+pixi run monitor runs/<run_id>            # web page at http://127.0.0.1:8765/
+pixi run watch runs/<run_id>              # one terminal line per notable event
+```
+
+**`monitor`** serves a page that re-reads the bundle every 15 s:
+
+- run status, including "waiting for operator" when the run is at a placement prompt;
+- drift references by position;
+- the response by drive level (with protocol grays ringed);
+- spectra (presets, or any single measurement from the table);
+- a "Compare shapes" card for two spectra, with the overall level removed;
+- the measurement table and the run events.
+
+Add earlier runs to "Compare shapes" with `--library LABEL=RUN_DIR` (repeatable).
+
+The server binds to 127.0.0.1 by default. To watch from another computer, forward the port over SSH instead of
+binding to a public address:
+
+```bash
+ssh -L 8765:127.0.0.1:8765 <user>@<rig-host>     # then open http://127.0.0.1:8765/ locally
+```
+
+The page loads d3 from cdnjs, so the viewing browser needs internet access.
+
+**`watch`** prints:
+
+- each drift reference with its change against the first one at that position (flagged beyond ±2%);
+- any saturated, unstable or noisy measurement;
+- a progress line every 10 measurements;
+- placements and other log events.
+
+It exits when the run is sealed or stops. With `--state FILE` it can be restarted without repeating itself.
+
+Signals in both are dark-subtracted counts summed over the detector, per second, in M counts/s. They are relative,
+not radiometric.
+
+Don't open the monitor on the projector display, and don't take screenshots during a run. GNOME's screenshot tool
+dims every monitor, the projector included.
+
 ### Data Migration
 
 ```bash
@@ -158,6 +203,7 @@ specsail/
 ├── calibration_run.py      # Projector calibration runs driven through Citrus
 ├── citrus_control.py       # Citrus local control socket client
 ├── spectral_capture.py     # Raw native-pixel capture (no calibration, no binning)
+├── run_monitor/            # Follow a run: web page (pixi run monitor) and terminal watcher (pixi run watch)
 ├── examples/               # Calibration run plans
 ├── tests/                  # Unit tests (pixi run test)
 ├── calibration.json        # Calibration coefficients (if created)
