@@ -141,11 +141,39 @@ class PM100USB:
         """``SYST:SENS:IDN?`` parsed: name, serial, calibration, type, subtype, flags."""
         return parse_sensor_info(self.query("SYST:SENS:IDN?"))
 
-    def configure(self, average_count):
-        """Watts, auto range, the given averaging rate (one sample ~3 ms)."""
+    def configure(self, average_count, range_upper_W=None, lowpass=None):
+        """
+        Watts, the given averaging rate (one sample ~3 ms), and the range and bandwidth.
+
+        For pulsed sources such as DLP projectors use a FIXED range above the pulse peaks and the low-pass
+        filter ON. On 2026-10-20, with a BenQ DLP projector, auto range settled about 20x too sensitive
+        (17.8 µW full scale for ~320 µW mean), clipping the pulses so white read 116 µW instead of ~323 µW.
+        A fixed 17.8 mW range with the low-pass filter reproduced the spectrometer's gray/white ratios
+        (gray 178: 0.348 vs 0.345; gray 128: 0.119 vs 0.120). Without the filter, white read ~14% high.
+        Fixed 1.78 mW and 17.8 mW ranges agreed on white (323.7 vs 323.3 µW), so 1.78 mW is safe there.
+        Returns the read-back settings.
+        """
         self.write("SENS:POW:UNIT W")
-        self.write("SENS:POW:RANG:AUTO ON")
+        if range_upper_W is None:
+            self.write("SENS:POW:RANG:AUTO ON")
+        else:
+            self.write("SENS:POW:RANG:AUTO OFF")
+            self.write(f"SENS:POW:RANG:UPP {float(range_upper_W):g}")
+        if lowpass is not None:
+            self.write(f"INP:PDI:FILT:LPAS:STAT {'ON' if lowpass else 'OFF'}")
         self.set_average(average_count)
+        return self.settings()
+
+    def settings(self):
+        """Read-back of range, auto-range and low-pass state (raw strings; missing ones as None)."""
+        out = {}
+        for key, cmd in (("range_W", "SENS:POW:RANG?"), ("auto_range", "SENS:POW:RANG:AUTO?"),
+                         ("lowpass", "INP:PDI:FILT:LPAS:STAT?"), ("average_count", "SENS:AVER:COUN?")):
+            try:
+                out[key] = self.query(cmd).strip()
+            except Exception:  # fake transports may not know every command
+                out[key] = None
+        return out
 
     def set_wavelength(self, nm):
         self.write(f"SENS:CORR:WAV {float(nm):g}")

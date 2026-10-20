@@ -152,8 +152,11 @@ class ManualMeter:
         return {"name": None, "serial": None, "calibration": None, "type": None,
                 "subtype": None, "flags": None, "raw": "manual"}
 
-    def configure(self, average_count):
-        self.operator.say(f"Manual mode: set the meter to W, auto range, averaging {average_count}.")
+    def configure(self, average_count, range_upper_W=None, lowpass=None):
+        rng = "auto range" if range_upper_W is None else f"FIXED range {range_upper_W} W"
+        lp = "" if lowpass is None else f", low-pass filter {'ON' if lowpass else 'OFF'}"
+        self.operator.say(f"Manual mode: set the meter to W, {rng}{lp}, averaging {average_count}.")
+        return {"manual": True, "range_upper_W": range_upper_W, "lowpass": lowpass}
 
     def set_wavelength(self, nm):
         self.wavelength_nm = nm
@@ -248,7 +251,9 @@ class PowerSession:
                 if not self.allow_serial_mismatch:
                     raise RunAborted("; ".join(mismatches) + " (use --allow-serial-mismatch to override)")
                 self.operator.say("WARNING: " + "; ".join(mismatches))
-        self.meter.configure(self.plan["average_count"])
+        meter_plan = self.plan["meter"]
+        self.instrument["meter_settings"] = self.meter.configure(
+            self.plan["average_count"], meter_plan.get("range_upper_W"), meter_plan.get("lowpass"))
         self.bundle.log("preflight_ok", meter_idn=idn.get("raw"), sensor_info=sensor.get("raw"))
 
     def _operator_checks(self):
