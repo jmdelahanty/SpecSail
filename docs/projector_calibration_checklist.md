@@ -117,6 +117,9 @@ pixi run calrun runs/plans/PLAN.json --socket /tmp/citrus_local_control.sock
     settling. Check that the recorded scans are steady.
   - A steady climb or fall above about **2%** means the mount is moving. Let the current arena finish, then
     re-secure at the next placement prompt.
+- [ ] **Keep every window off the projector display.** The projector is part of the desktop, so a window dragged
+      past the edge of the main screen lands on the canvas.
+  - **Why:** a window dragged onto the projector for about a second cut one 10 s scan by 11% (2026-10-20).
 - [ ] **Stopping is safe.** Ctrl+C restores Citrus, and the bundle keeps everything measured so far, marked
       interrupted.
 - [ ] Glance at a spectrum now and then:
