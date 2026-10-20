@@ -45,6 +45,20 @@ BASE_PLAN = {
 }
 
 
+def arena_fills_plan(**settings):
+    plan = copy.deepcopy(BASE_PLAN)
+    plan["scene_backend"] = "arena_fills"
+    plan["positions"] = [
+        {"position_id": "arena_1_all", "arena_id": "arena_1", "pattern": "all"},
+        {"position_id": "arena_1_target_only", "arena_id": "arena_1", "pattern": "target_only"},
+        {"position_id": "arena_1_others", "arena_id": "arena_1", "pattern": "all_but_target"},
+    ]
+    plan["patches"] = [{"patch_id": "white_255", "role": "projector_white", "rgba8": [255, 255, 255, 255]}]
+    if settings:
+        plan["arena_fills"] = settings
+    return plan
+
+
 def write_plan(directory, plan):
     path = Path(directory) / "plan.json"
     path.write_text(json.dumps(plan))
@@ -253,12 +267,102 @@ class PlanValidationTest(unittest.TestCase):
     def test_fixed_patch_integration_respects_minimum(self):
         self.check_invalid(lambda p: p["patches"][0].update(integration_ms=50), ">= integration.min_ms")
 
+    def test_pattern_needs_arena_fills_backend(self):
+        self.check_invalid(lambda p: p["positions"][0].update(pattern="target_only"),
+                           "pattern needs scene_backend arena_fills")
+
+    def test_arena_fills_pattern_must_be_known(self):
+        plan = arena_fills_plan()
+        plan["positions"][0]["pattern"] = "neighbours"
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ValueError) as caught:
+                load_plan(write_plan(tmp, plan))
+        self.assertIn("pattern must be one of", str(caught.exception))
+
+    def test_arena_fills_domain_must_be_known(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ValueError) as caught:
+                load_plan(write_plan(tmp, arena_fills_plan(domain="circle")))
+        self.assertIn("arena_fills.domain", str(caught.exception))
+
     def test_core_v1_patches_are_valid(self):
         plan = copy.deepcopy(BASE_PLAN)
         plan["patches"] = core_v1_patches()
         with tempfile.TemporaryDirectory() as tmp:
             loaded, _ = load_plan(write_plan(tmp, plan))
         self.assertEqual(len(loaded["patches"]), 4 + 4 * 8 + 3)
+
+
+
+class ArenaFillsRunTest(unittest.TestCase):
+    """Runs with the arena_fills backend (Citrus C7) against the fake Citrus."""
+
+    setUp = CalibrationRunTest.setUp
+    make_run = CalibrationRunTest.make_run
+    fake_citrus = CalibrationRunTest.fake_citrus
+    read_context = CalibrationRunTest.read_context
+
+    def measurements_by_position(self, bundle):
+        out = {}
+        for path in sorted((bundle / "measurements").glob("*/measurement.json")):
+            m = json.loads(path.read_text())
+            if m.get("patch_id") == "white_255":
+                out[m["position_id"]] = m
+        return out
+
+    def test_arena_fills_patterns_light_the_right_arenas(self):
+        citrus = self.fake_citrus()
+        bundle = self.make_run(arena_fills_plan(), citrus).run()
+        by_pos = self.measurements_by_position(bundle)
+        self.assertEqual(by_pos["arena_1_all"]["scene"]["pattern"], "all")
+        self.assertEqual(sorted(by_pos["arena_1_all"]["scene"]["arena_fill_rgba_u8"]),
+                         ["arena_1", "arena_2", "arena_3", "arena_4"])
+        self.assertEqual(list(by_pos["arena_1_target_only"]["scene"]["arena_fill_rgba_u8"]), ["arena_1"])
+        self.assertEqual(sorted(by_pos["arena_1_others"]["scene"]["arena_fill_rgba_u8"]),
+                         ["arena_2", "arena_3", "arena_4"])
+        self.assertEqual(by_pos["arena_1_others"]["scene"]["background_rgba_u8"], [0, 0, 0, 255])
+        requests = [r for r in citrus.requests if r["method"] == "set_calibration_scene"]
+        self.assertTrue(all(r["params"]["recipe_id"] == "arena_fills" for r in requests))
+        self.assertTrue(all(sorted(r["params"]["arena_ids"]) == BASE_PLAN["arena_ids"] for r in requests))
+        self.assertEqual(self.read_context(bundle)["outcome"], "completed")
+        self.assertEqual(citrus.restores, 1)
+
+    def test_arena_fills_measures_stray_light_from_other_arenas(self):
+        citrus = self.fake_citrus(stray_fraction=0.01)
+        bundle = self.make_run(arena_fills_plan(), citrus).run()
+        by_pos = self.measurements_by_position(bundle)
+        # The fiber sits at arena_1. With arena_1 held black and three others lit,
+        # it still sees the stray light; with only arena_1 lit it sees less than "all".
+        def peak(m):
+            return max(s["peak_counts"] for s in m["scans"]) / m["integration_us"]
+        self.assertGreater(peak(by_pos["arena_1_others"]), 0.0)
+        self.assertLess(peak(by_pos["arena_1_target_only"]), peak(by_pos["arena_1_all"]))
+
+    def test_arena_fills_background_patch_mode(self):
+        citrus = self.fake_citrus()
+        bundle = self.make_run(arena_fills_plan(background="patch"), citrus).run()
+        by_pos = self.measurements_by_position(bundle)
+        self.assertEqual(by_pos["arena_1_target_only"]["scene"]["background_rgba_u8"], [255, 255, 255, 255])
+
+    def test_arena_fills_overlay_left_on_refuses_capture(self):
+        citrus = self.fake_citrus(overlay_stuck=True)
+        run = self.make_run(arena_fills_plan(), citrus)
+        with self.assertRaises(RunAborted):
+            run.run()
+        context = self.read_context(run.bundle.root)
+        self.assertEqual(context["outcome"], "failed")
+        self.assertIn("overlay", context["error"])
+        self.assertEqual(citrus.restores, 1)
+
+    def test_citrus_without_arena_fills_is_refused(self):
+        citrus = self.fake_citrus(arena_fills_supported=False)
+        run = self.make_run(arena_fills_plan(), citrus)
+        with self.assertRaises(CitrusControlError):
+            run.run()
+        context = self.read_context(run.bundle.root)
+        self.assertEqual(context["outcome"], "failed")
+        self.assertIn("unsupported_calibration_scene_recipe", context["error"])
+        self.assertEqual(citrus.restores, 0)
 
 
 if __name__ == "__main__":
