@@ -73,6 +73,11 @@ Rig-specific values below are for **omnifin0** on **pancake0**: BenQ X3100i proj
   A worktree build also needs `CITRUS_PROJECT_ROOT_OVERRIDE=<main checkout>` to find the rig configs.
 - [ ] **Load the rig and canvas** in the GUI (Rig Directory, then Canvas Config, e.g. `omnifin0` / `shadow`).
   - **Why:** without a loaded canvas the first scene fails with `arena_not_found_or_ambiguous`.
+- [ ] **For single-arena plans (`uniform_gray` backend): clear every preview** in the GUI for all arenas (preview
+      mode None, and no protocol-step, arena-definition or experimental-area preview), then check by eye that only
+      the target arena lights up.
+  - **Why:** a one-arena scene leaves the other arenas showing their previews, which adds stray light.
+    `canvas_fill` (and the planned `arena_fills`) control every arena and don't need this.
 
 ## 4. Fiber mount
 
