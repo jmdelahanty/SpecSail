@@ -36,6 +36,18 @@ then the red, green and blue primaries. The movie is not committed (several MB);
 
 ### Why a sensor's angle response matters
 
+A gentler introduction comes first:
+
+```bash
+pixi run animate-cosine-rule --out cosine_rule.mp4
+```
+
+It covers, in about a minute:
+
+1. why a tilted beam spreads over a longer patch;
+2. why a flat surface therefore collects in proportion to cos θ (the shrink factor: 1 straight on, 0.5 at 60°);
+3. how a recessed photodiode and a cosine corrector compare.
+
 ```bash
 pixi run animate-cosine --out cosine_response.mp4
 ```
