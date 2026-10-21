@@ -115,6 +115,8 @@ log.jsonl
 
 Design: Citrus `docs/projector_spectral_calibration_run_design_2026-10-19.md`.
 
+New to spectrometers? [docs/how_the_spectrometer_works.md](docs/how_the_spectrometer_works.md) explains the light path, how raw counts become counts per second per pixel, and why counts are not brightness. `pixi run explain runs/<run_id>` draws the same figure from any run.
+
 ### Data Migration
 
 ```bash

@@ -14,6 +14,10 @@ save = "python -u save_results.py"
 clear = "rm -f data/*.csv"
 migrate = "python -u migrate_data.py"
 calrun = "python -u calibration_run.py"
+explain = "python -u explain_spectrum.py"
+animate = "python -u animate_light_path.py"
+animate-cosine = "python -u animate_cosine_response.py"
+animate-cosine-rule = "python -u animate_cosine_rule.py"
 test = "python -m unittest discover -s tests -t ."
 
 [dependencies]
