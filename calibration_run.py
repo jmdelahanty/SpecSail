@@ -44,7 +44,7 @@ PLAN_SCHEMA_ID = "citrus.projector_spectral_run_plan"
 CAPTURE_CONTEXT_SCHEMA_ID = "citrus.projector_spectral_capture_context"
 MEASUREMENT_SCHEMA_ID = "specsail.calibration_run.measurement"
 SCENE_BACKENDS = ("canvas_fill", "uniform_gray", "arena_fills")
-ARENA_FILL_PATTERNS = ("all", "target_only", "all_but_target")
+ARENA_FILL_PATTERNS = ("all", "target_only", "all_but_target", "selected_sources")
 ARENA_FILL_DOMAINS = ("full_arena_unmasked", "experimental_area_masked")
 ARENA_FILL_BACKGROUNDS = ("black", "patch")
 TARGET_PLANES = ("projected_surface", "estimated_fish_plane")
@@ -152,6 +152,14 @@ def load_plan(path):
                 errors.append(f"position {pid}: pattern needs scene_backend arena_fills")
             elif pos["pattern"] not in ARENA_FILL_PATTERNS:
                 errors.append(f"position {pid}: pattern must be one of {ARENA_FILL_PATTERNS}")
+        if pos.get("pattern") == "selected_sources" or "source_arena_ids" in pos:
+            if plan.get("scene_backend") != "arena_fills" or pos.get("pattern") != "selected_sources":
+                errors.append(f"position {pid}: source_arena_ids needs arena_fills and selected_sources")
+            sources = pos.get("source_arena_ids")
+            if not (isinstance(sources, list) and all(isinstance(a, str) for a in sources)):
+                errors.append(f"position {pid}: source_arena_ids must be a list of arena IDs")
+            elif len(set(sources)) != len(sources) or any(a not in arena_ids for a in sources):
+                errors.append(f"position {pid}: source_arena_ids must be unique members of arena_ids")
 
     fills = plan.get("arena_fills", {})
     if "arena_fills" in plan and plan.get("scene_backend") != "arena_fills":
@@ -339,7 +347,9 @@ class ArenaFillsScenes(CanvasFillScenes):
     One transaction owns every arena, so no preview can leak in. Each position
     sets a pattern: ``all`` lights every arena, ``target_only`` lights only the
     position's arena, ``all_but_target`` lights every other arena and holds the
-    position's arena black. Arenas left out of the fill map are black by
+    position's arena black. ``selected_sources`` lights ``source_arena_ids``
+    independently of the probe arena (an empty list holds every arena black).
+    Arenas left out of the fill map are black by
     construction in Citrus. ``arena_fills.background`` sets the gaps between
     arenas: ``black`` (default) or ``patch`` (the patch colour, which with
     pattern ``all`` reproduces ``canvas_fill``).
@@ -356,11 +366,15 @@ class ArenaFillsScenes(CanvasFillScenes):
     @staticmethod
     def lit_arenas(arena_ids, position, pattern):
         target = position["arena_id"] if position else None
+        if pattern == "selected_sources":
+            return [a for a in arena_ids if a in position["source_arena_ids"]]
         if pattern == "target_only":
             return [a for a in arena_ids if a == target]
         if pattern == "all_but_target":
             return [a for a in arena_ids if a != target]
-        return list(arena_ids)
+        if pattern == "all":
+            return list(arena_ids)
+        raise ValueError(f"unknown arena fill pattern: {pattern}")
 
     def _fills(self, rgba8, position, pattern):
         lit = self.lit_arenas(self.plan["arena_ids"], position, pattern)
@@ -399,6 +413,8 @@ class ArenaFillsScenes(CanvasFillScenes):
             raise RunAborted("Citrus status has no arena_fills object: this Citrus build lacks C7")
         if state.get("placement_overlay") is not False:
             raise RunAborted("Citrus reports the placement overlay is still on; refusing to capture")
+        if state.get("domain") != self.domain:
+            raise RunAborted(f"Citrus reports domain {state.get('domain')}, expected {self.domain}")
         if list(state.get("background_rgba_u8", [])) != background:
             raise RunAborted(f"Citrus background {state.get('background_rgba_u8')}, expected {background}")
         shown = {a.get("arena_id"): list(a.get("rgba_u8", [])) for a in state.get("arenas", [])}
@@ -408,7 +424,8 @@ class ArenaFillsScenes(CanvasFillScenes):
                 raise RunAborted(f"Citrus shows {shown.get(arena_id)} in {arena_id}, expected {expected}")
         record = self._scene_record(status, request_id, operation_id)
         record.update(pattern=pattern, arena_fill_rgba_u8=fills, background_rgba_u8=background,
-                      domain=self.domain)
+                      domain=self.domain,
+                      source_arena_ids=self.lit_arenas(self.plan["arena_ids"], position, pattern))
         return record
 
 

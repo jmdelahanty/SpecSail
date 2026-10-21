@@ -1,0 +1,334 @@
+{
+  "schema_id": "citrus.projector_spectral_run_plan",
+  "schema_version": 1,
+  "plan_id": "omnifin0_shadow_source_crosstalk_optional_v1",
+  "rig_id": "omnifin0",
+  "canvas_name": "shadow",
+  "scene_backend": "arena_fills",
+  "target_plane": "projected_surface",
+  "spectrometer_serial": "QEP04819",
+  "arena_ids": [
+    "arena_1",
+    "arena_2",
+    "arena_3",
+    "arena_4"
+  ],
+  "warmup_min": 30,
+  "settle_s": 1.0,
+  "scans_per_patch": 10,
+  "stability": {
+    "max_relative_change": 0.01,
+    "max_attempts": 4
+  },
+  "integration": {
+    "initial_ms": 100,
+    "min_ms": 100,
+    "max_ms": 100,
+    "frame_rate_hz": 120,
+    "target_peak_fraction": 0.8
+  },
+  "projector_off_background": false,
+  "defaults": {
+    "fiber_holder": "rigid_fixture_required"
+  },
+  "positions": [
+    {
+      "position_id": "arena_1_center_from_arena_1",
+      "arena_id": "arena_1",
+      "offset_mm": [
+        0.0,
+        0.0
+      ],
+      "pattern": "selected_sources",
+      "source_arena_ids": [
+        "arena_1"
+      ]
+    },
+    {
+      "position_id": "arena_1_center_from_arena_2",
+      "arena_id": "arena_1",
+      "offset_mm": [
+        0.0,
+        0.0
+      ],
+      "pattern": "selected_sources",
+      "source_arena_ids": [
+        "arena_2"
+      ]
+    },
+    {
+      "position_id": "arena_1_center_from_arena_3",
+      "arena_id": "arena_1",
+      "offset_mm": [
+        0.0,
+        0.0
+      ],
+      "pattern": "selected_sources",
+      "source_arena_ids": [
+        "arena_3"
+      ]
+    },
+    {
+      "position_id": "arena_1_center_from_arena_4",
+      "arena_id": "arena_1",
+      "offset_mm": [
+        0.0,
+        0.0
+      ],
+      "pattern": "selected_sources",
+      "source_arena_ids": [
+        "arena_4"
+      ]
+    },
+    {
+      "position_id": "arena_1_center_all",
+      "arena_id": "arena_1",
+      "offset_mm": [
+        0.0,
+        0.0
+      ],
+      "pattern": "all"
+    },
+    {
+      "position_id": "arena_2_center_from_arena_1",
+      "arena_id": "arena_2",
+      "offset_mm": [
+        0.0,
+        0.0
+      ],
+      "pattern": "selected_sources",
+      "source_arena_ids": [
+        "arena_1"
+      ]
+    },
+    {
+      "position_id": "arena_2_center_from_arena_2",
+      "arena_id": "arena_2",
+      "offset_mm": [
+        0.0,
+        0.0
+      ],
+      "pattern": "selected_sources",
+      "source_arena_ids": [
+        "arena_2"
+      ]
+    },
+    {
+      "position_id": "arena_2_center_from_arena_3",
+      "arena_id": "arena_2",
+      "offset_mm": [
+        0.0,
+        0.0
+      ],
+      "pattern": "selected_sources",
+      "source_arena_ids": [
+        "arena_3"
+      ]
+    },
+    {
+      "position_id": "arena_2_center_from_arena_4",
+      "arena_id": "arena_2",
+      "offset_mm": [
+        0.0,
+        0.0
+      ],
+      "pattern": "selected_sources",
+      "source_arena_ids": [
+        "arena_4"
+      ]
+    },
+    {
+      "position_id": "arena_2_center_all",
+      "arena_id": "arena_2",
+      "offset_mm": [
+        0.0,
+        0.0
+      ],
+      "pattern": "all"
+    },
+    {
+      "position_id": "arena_3_center_from_arena_1",
+      "arena_id": "arena_3",
+      "offset_mm": [
+        0.0,
+        0.0
+      ],
+      "pattern": "selected_sources",
+      "source_arena_ids": [
+        "arena_1"
+      ]
+    },
+    {
+      "position_id": "arena_3_center_from_arena_2",
+      "arena_id": "arena_3",
+      "offset_mm": [
+        0.0,
+        0.0
+      ],
+      "pattern": "selected_sources",
+      "source_arena_ids": [
+        "arena_2"
+      ]
+    },
+    {
+      "position_id": "arena_3_center_from_arena_3",
+      "arena_id": "arena_3",
+      "offset_mm": [
+        0.0,
+        0.0
+      ],
+      "pattern": "selected_sources",
+      "source_arena_ids": [
+        "arena_3"
+      ]
+    },
+    {
+      "position_id": "arena_3_center_from_arena_4",
+      "arena_id": "arena_3",
+      "offset_mm": [
+        0.0,
+        0.0
+      ],
+      "pattern": "selected_sources",
+      "source_arena_ids": [
+        "arena_4"
+      ]
+    },
+    {
+      "position_id": "arena_3_center_all",
+      "arena_id": "arena_3",
+      "offset_mm": [
+        0.0,
+        0.0
+      ],
+      "pattern": "all"
+    },
+    {
+      "position_id": "arena_4_center_from_arena_1",
+      "arena_id": "arena_4",
+      "offset_mm": [
+        0.0,
+        0.0
+      ],
+      "pattern": "selected_sources",
+      "source_arena_ids": [
+        "arena_1"
+      ]
+    },
+    {
+      "position_id": "arena_4_center_from_arena_2",
+      "arena_id": "arena_4",
+      "offset_mm": [
+        0.0,
+        0.0
+      ],
+      "pattern": "selected_sources",
+      "source_arena_ids": [
+        "arena_2"
+      ]
+    },
+    {
+      "position_id": "arena_4_center_from_arena_3",
+      "arena_id": "arena_4",
+      "offset_mm": [
+        0.0,
+        0.0
+      ],
+      "pattern": "selected_sources",
+      "source_arena_ids": [
+        "arena_3"
+      ]
+    },
+    {
+      "position_id": "arena_4_center_from_arena_4",
+      "arena_id": "arena_4",
+      "offset_mm": [
+        0.0,
+        0.0
+      ],
+      "pattern": "selected_sources",
+      "source_arena_ids": [
+        "arena_4"
+      ]
+    },
+    {
+      "position_id": "arena_4_center_all",
+      "arena_id": "arena_4",
+      "offset_mm": [
+        0.0,
+        0.0
+      ],
+      "pattern": "all"
+    }
+  ],
+  "citations": {
+    "spectrometer_part_id": "spectrometer.ocean_insight.qe_pro",
+    "fiber_part_id": "optic.ocean_insight.p50_1_vis_nir",
+    "hardware_library_commit": "24d0d7e",
+    "spectrometer_instance_id": "spectrometer-qepro-1",
+    "fiber_instance_id": "fiber-p50-vis-nir-1",
+    "pancakebatter_commit": "1ec997e",
+    "cosine_corrector": "none",
+    "rig_geometry_revision": "unknown",
+    "rig_yml_sha256": "unknown",
+    "projector_settings": "unknown",
+    "light_pdu_states": "unknown"
+  },
+  "drift_reference": {
+    "rgba8": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "every_n_patches": 10
+  },
+  "patches": [
+    {
+      "patch_id": "white_255_repeat_1",
+      "role": "projector_white",
+      "rgba8": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "integration_ms": 100
+    },
+    {
+      "patch_id": "white_255_repeat_2",
+      "role": "projector_white",
+      "rgba8": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "integration_ms": 100
+    },
+    {
+      "patch_id": "white_255_repeat_3",
+      "role": "projector_white",
+      "rgba8": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "integration_ms": 100
+    }
+  ],
+  "arena_fills": {
+    "domain": "full_arena_unmasked",
+    "background": "black"
+  },
+  "limitations": [
+    "OPTIONAL TEMPLATE; no physical measurements have been performed or validated by this plan.",
+    "Schedule a rig session and review exposure, frame rate, fixture, projector settings and citations before use. The 100 ms exposure is a starting value, not a measured safe setting.",
+    "Keep the probe fixed across the five consecutive conditions at each receiver; placement confirmations do not require moving it. Move only when the receiver changes.",
+    "16 source-to-receiver conditions plus 4 all-on controls. Each condition has three white acquisitions, start/end drift references, and an automatically paired all-black capture at every exposure used.",
+    "Ten scans per acquisition quantify short-term repeatability only. Repeats at a held position do not estimate repositioning error. Repeat the whole block in a separate rig-approved run to assess drift/order and placement.",
+    "Black background is necessary: illuminated gaps would be an additional unmeasured source. Projector-black is a baseline, not projector-off darkness.",
+    "Measures detector response at arena centres for white at this domain and drive; it does not calibrate whole-arena irradiance or identify every nonlinear interaction."
+  ]
+}
