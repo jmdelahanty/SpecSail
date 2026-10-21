@@ -93,6 +93,8 @@ pixi run calrun examples/calibration_plan_gray_pilot.json --socket /tmp/citrus_l
 pixi run calrun examples/calibration_plan_omnifin0_pass1.json --socket /tmp/citrus_local_control.sock
 ```
 
+Before a run, work through the operator checklist: [docs/projector_calibration_checklist.md](docs/projector_calibration_checklist.md).
+
 Measures a projector driven by [Citrus](https://github.com/JohnsonLabJanelia/citrus) position by position. For each probe position in the plan, the run:
 
 1. shows a placement target (crosshair overlay, or the dish outline for the gray pilot) and asks you to place the fiber;
