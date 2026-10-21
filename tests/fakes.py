@@ -15,6 +15,8 @@ import threading
 
 import numpy as np
 
+from citrus_control import CitrusControl
+
 
 BUILD = {"software_version": "0", "git_commit_hash": "fake", "git_describe": "fake",
          "git_dirty": False, "build_utc": "2026-10-19T00:00:00Z"}
@@ -38,7 +40,8 @@ class FakeCitrus:
 
     def __init__(self, arenas=("arena_1", "arena_2", "arena_3", "arena_4"),
                  canvas_fill_supported=True, overlay_stuck=False, present_after_polls=2,
-                 controller_reject=None, arena_fills_supported=True, stray_fraction=0.0):
+                 controller_reject=None, arena_fills_supported=True, stray_fraction=0.0,
+                 serve_socket=True):
         self.arenas = list(arenas)
         self.canvas_fill_supported = canvas_fill_supported
         self.overlay_stuck = overlay_stuck
@@ -55,6 +58,9 @@ class FakeCitrus:
         self.polls_left = 0
         self.rgba_by_arena = {a: [0, 0, 0, 255] for a in self.arenas}
         self.restores = 0
+        self._server = None
+        if not serve_socket:
+            return
         self._dir = tempfile.mkdtemp(prefix="fakecitrus")
         self.socket_path = os.path.join(self._dir, "control.sock")
         self._server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -65,6 +71,8 @@ class FakeCitrus:
         self._thread.start()
 
     def close(self):
+        if self._server is None:
+            return
         self._stop = True
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
@@ -216,6 +224,10 @@ class FakeCitrus:
                 lit = any(v > 0 for v in rgba[:3])
                 arenas.append({
                     "arena_id": a, "rgba_u8": rgba, "lit": lit,
+                    "arena_rect_canvas_px": [self.arenas.index(a) * 480, 0, 480, 1080],
+                    "region": {"shape": "arena_rectangle", "x_px": self.arenas.index(a) * 480,
+                               "y_px": 0, "width_px": 480, "height_px": 1080},
+                    "filled_pixel_count": 480 * 1080,
                     "semantic_role": "physical_target_transmitted_light" if lit else "physical_target_held_dark",
                     "coordinate_target": False,
                     "illumination_domain": "configured_arena_rectangle" if domain == "full_arena_unmasked"
@@ -226,6 +238,7 @@ class FakeCitrus:
                 self.rgba_by_arena[a] = rgba
             self.scene["arena_fills"] = {
                 "domain": domain, "background_rgba_u8": background,
+                "framebuffer_size_px": [1920, 1080],
                 "placement_overlay": overlay,
                 "overlay_line_rule": "per_pixel_black_if_underlying_rec709_luma_ge_128_else_white" if overlay else None,
                 "probe_targets": options.get("probe_targets", []),
@@ -305,6 +318,25 @@ class FakeCitrus:
         return None
 
 
+class InProcessCitrusControl(CitrusControl):
+    """Test transport only: exercise control semantics without a Unix socket."""
+
+    def __init__(self, citrus):
+        super().__init__("unused-in-process", "test")
+        self.fake = citrus
+
+    def request(self, method, params=None, operation_id=None):
+        req = {"method": method, "request_id": self._next_id(method)}
+        if params is not None:
+            req["params"] = params
+        if operation_id is not None:
+            req["operation_id"] = operation_id
+        with self.fake.lock:
+            self.fake.requests.append(req)
+            response = self.fake._handle(req)
+        return json.loads(json.dumps(dict(response, _request=req)))
+
+
 class _Feature:
     def __init__(self, **methods):
         for name, fn in methods.items():
@@ -325,10 +357,17 @@ class FakeSpectrometer:
     max_intensity = 200000.0
     integration_time_micros_limits = (8000, 1600000000)
 
-    def __init__(self, citrus, arena_id=None, counts_per_ms_at_full=400.0):
+    def __init__(self, citrus, arena_id=None, counts_per_ms_at_full=400.0,
+                 source_spectra=None, nonadditive_fraction=0.0,
+                 noise_counts=0.0, follow_probe_target=False):
         self.citrus = citrus
         self.arena_id = arena_id
         self.counts_per_ms_at_full = counts_per_ms_at_full
+        self.source_spectra = source_spectra
+        self.nonadditive_fraction = nonadditive_fraction
+        self.noise_counts = noise_counts
+        self.follow_probe_target = follow_probe_target
+        self.rng = np.random.default_rng(615)
         self._dp = [0, 1, 2, 3, 1040, 1041, 1042, 1043]
         self._nc = [1.0, 1e-7, 0.0]
         self.integration_us = 100000
@@ -350,8 +389,24 @@ class FakeSpectrometer:
 
     def intensities(self, correct_dark_counts=False, correct_nonlinearity=False):
         brightness = self.citrus.brightness(self.arena_id)
-        signal = self._shape * brightness * self.counts_per_ms_at_full * self.integration_us / 1000.0
-        return np.minimum(1000.0 + signal, self.max_intensity)
+        spectrum = self._shape * brightness
+        if self.source_spectra is not None:
+            receiver = self.arena_id or self.citrus.arenas[0]
+            state = self.citrus.scene.get("arena_fills", {})
+            if self.follow_probe_target and state.get("active_target"):
+                receiver = next(t["arena_id"] for t in state["probe_targets"]
+                                if t["target_id"] == state["active_target"])
+            spectrum = np.zeros(self.pixels)
+            active = 0
+            for source, rgba in self.citrus.rgba_by_arena.items():
+                level = sum(rgba[:3]) / (3 * 255.0)
+                active += level > 0
+                spectrum += level * self.source_spectra[receiver][source]
+            if active > 1:
+                spectrum *= 1 + self.nonadditive_fraction
+        signal = spectrum * self.counts_per_ms_at_full * self.integration_us / 1000.0
+        noise = self.rng.normal(0, self.noise_counts, self.pixels)
+        return np.minimum(1000.0 + signal + noise, self.max_intensity)
 
     def close(self):
         self.closed = True
