@@ -63,7 +63,12 @@ def load_sweep(session_dir, own_black=False):
         ii = np.array([i for _, i in pts])
         net = (W[ii] - black[ii]) * (w0 / white[ii])
         if own_black:
-            net = net - np.median(net[codes <= 40])
+            lo = net[codes <= 40]
+            # Only valid when codes 0-40 are dark: at projector Brightness 50 they are lit.
+            if np.polyfit(codes[codes <= 40], lo, 1)[0] * 40 > 5 * max(np.std(np.diff(W[bi])), 1e-12):
+                raise ValueError(f"--own-black: {ch} codes 0-40 are not dark (they rise with code); "
+                                 "zero on the black references instead")
+            net = net - np.median(lo)
         curves[ch] = (codes, net)
     refs = {"black_W": W[bi], "black_read_sd_W": S[bi].mean(), "white_net_W": wref,
             "black_noise_W": np.std(np.diff(W[bi])) / np.sqrt(2)}
